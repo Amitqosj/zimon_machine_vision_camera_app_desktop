@@ -1,0 +1,30 @@
+# ZIMON - Behaviour Tracking System Dependencies
+# Production-ready requirements for zebrafish tracking laboratory application
+
+# Core Dependencies
+numpy>=1.21.0
+PyQt6>=6.4.0
+opencv-python>=4.5.0
+pandas>=1.3.0
+matplotlib>=3.5.0
+scipy>=1.7.0
+Pillow>=8.0.0
+psutil>=5.8.0
+pyserial>=3.5
+bcrypt>=4.0.0
+
+# HTTP API (optional web UI)
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-jose[cryptography]>=3.3.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.6
+
+# Camera Support
+pypylon>=1.7.0              # Basler cameras (optional)
+Spinnaker>=1.26.0           # FLIR cameras (optional)
+
+# Development & Testing (optional)
+pytest>=6.0.0
+black>=21.0.0
+flake8>=4.0.0
