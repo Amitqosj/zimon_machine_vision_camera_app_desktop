@@ -12,8 +12,9 @@ import {
   SlidersHorizontal,
   Zap,
 } from 'lucide-react'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { apiFetch } from '../api/client'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardLayout } from '../context/DashboardLayoutContext'
@@ -29,6 +30,14 @@ const RECIPE_ICONS: Record<string, LucideIcon> = {
 }
 
 export function AppLayout() {
+  type NotificationItem = {
+    id: number
+    title: string
+    message: string
+    is_read: boolean
+    created_at?: string | null
+  }
+
   const { user } = useAuth()
   const ctx = useDashboardLayout()
   const hw = useHardwareStatus()
@@ -38,11 +47,55 @@ export function AppLayout() {
     [location.pathname],
   )
   const [now, setNow] = useState(() => new Date())
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifBusy, setNotifBusy] = useState(false)
+  const notifBoxRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000)
     return () => window.clearInterval(id)
   }, [])
+
+  async function loadNotifications() {
+    setNotifBusy(true)
+    try {
+      const items = await apiFetch<NotificationItem[]>('/api/notifications')
+      setNotifications(items)
+    } catch {
+      setNotifications([])
+    } finally {
+      setNotifBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadNotifications()
+    const id = window.setInterval(() => void loadNotifications(), 10000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!notifBoxRef.current) return
+      if (!notifBoxRef.current.contains(e.target as Node)) setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  async function handleMarkRead(id: number) {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
+    )
+    try {
+      await apiFetch(`/api/notifications/mark-as-read/${id}`, { method: 'POST' })
+    } catch {
+      // Keep optimistic UI behavior for smooth interaction.
+    }
+  }
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const arduinoOk = hw.arduinoOk
   const cameraPreview = hw.previewing.length > 0
@@ -53,7 +106,7 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen flex-col bg-zimon-bg text-zimon-fg dark:bg-transparent">
-      <header className="shrink-0 bg-zimon-panel/95 px-4 py-3 backdrop-blur-xl dark:bg-slate-950/80 md:px-6">
+      <header className="relative z-40 shrink-0 overflow-visible bg-zimon-panel/95 px-4 py-3 backdrop-blur-xl dark:bg-slate-950/80 md:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
           <div className="flex min-w-0 shrink-0 items-center gap-3 md:max-w-[min(100%,280px)]">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200/90 dark:bg-slate-900/45">
@@ -118,15 +171,56 @@ export function AppLayout() {
           </nav>
 
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              className="relative rounded-xl border-0 bg-slate-200/80 p-2.5 text-slate-600 transition-colors hover:bg-blue-500/15 hover:text-blue-700 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200"
-              title="Notifications"
-              aria-label="Notifications"
-            >
-              <Bell className="h-5 w-5" />
-              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-950" />
-            </button>
+            <div className="relative" ref={notifBoxRef}>
+              <button
+                type="button"
+                className="relative rounded-xl border-0 bg-slate-200/80 p-2.5 text-slate-600 transition-colors hover:bg-blue-500/15 hover:text-blue-700 dark:bg-slate-900/70 dark:text-slate-400 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200"
+                title="Notifications"
+                aria-label="Notifications"
+                onClick={() => {
+                  const next = !notifOpen
+                  setNotifOpen(next)
+                  if (next) void loadNotifications()
+                }}
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold text-white">
+                    {unreadCount}
+                  </span>
+                ) : null}
+              </button>
+              {notifOpen ? (
+                <div className="absolute right-0 z-50 mt-2 w-[26rem] max-w-[calc(100vw-1rem)] rounded-xl border border-zimon-border bg-zimon-panel p-3 shadow-xl">
+                  <div className="border-b border-zimon-border px-2 pb-2 text-xs font-semibold text-gray-300">
+                    Notifications
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifBusy ? (
+                      <div className="px-2 py-3 text-xs text-gray-400">Loading...</div>
+                    ) : notifications.length === 0 ? (
+                      <div className="px-2 py-3 text-xs text-gray-400">No notifications yet.</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          className={[
+                            'w-full border-b border-zimon-border/60 px-3 py-3 text-left text-sm last:border-b-0',
+                            n.is_read ? 'text-gray-400' : 'bg-indigo-500/10 text-white',
+                          ].join(' ')}
+                          onClick={() => void handleMarkRead(n.id)}
+                        >
+                          <div className={n.is_read ? 'font-medium' : 'font-bold'}>{n.title}</div>
+                          <div className="mt-0.5">{n.message}</div>
+                          <div className="mt-1 text-[10px] text-gray-500">{n.created_at || ''}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <ThemeToggle variant="toolbar" />
             <Link
               to="/app/settings"

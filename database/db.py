@@ -40,8 +40,10 @@ def init_db():
     if not _column_exists(cursor, "users", "is_locked"):
         cursor.execute("ALTER TABLE users ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0")
     if not _column_exists(cursor, "users", "updated_at"):
+        # SQLite does not allow non-constant defaults in ALTER TABLE ADD COLUMN.
+        cursor.execute("ALTER TABLE users ADD COLUMN updated_at TIMESTAMP")
         cursor.execute(
-            "ALTER TABLE users ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            "UPDATE users SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)"
         )
 
     cursor.execute(
@@ -123,6 +125,30 @@ def init_db():
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)
         """
     )
 

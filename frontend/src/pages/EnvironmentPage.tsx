@@ -289,6 +289,14 @@ export function EnvironmentPage() {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pb-8">
       <ReadinessDashboard />
+      <div className="flex items-center justify-end">
+        <Link
+          to="/app/calibration"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+        >
+          Calibration
+        </Link>
+      </div>
       <details className="rounded-xl border border-zimon-border/70 bg-zimon-card/30 open:pb-2 dark:border-cyan-500/15 dark:bg-slate-950/25">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-cyan-200/90 hover:bg-slate-900/40">
           Advanced camera &amp; environment

@@ -52,6 +52,15 @@ class RecoveryResetRequest(BaseModel):
     new_password: str = Field(..., min_length=6)
 
 
+class NotificationOut(BaseModel):
+    id: int
+    title: str
+    message: str
+    is_read: bool = False
+    created_at: Optional[str] = None
+    user_id: Optional[int] = None
+
+
 class PresetCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: Optional[str] = ""

@@ -12,6 +12,7 @@ from backend.api.routers import (
     auth,
     camera,
     experiment,
+    notifications,
     presets,
     recordings,
     settings as settings_router,
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(recordings.router, prefix="/api")
     app.include_router(analysis.router, prefix="/api")
     app.include_router(settings_router.router, prefix="/api")
+    app.include_router(notifications.router, prefix="/api")
 
     @app.get("/api/health")
     def health():

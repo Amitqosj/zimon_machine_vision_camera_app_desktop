@@ -1,4 +1,5 @@
 import bcrypt
+import sqlite3
 
 from database.db import get_connection
 
@@ -51,8 +52,15 @@ def create_user(full_name, username, email, password, role=ROLE_STUDENT):
         )
         conn.commit()
         return True, cursor.lastrowid
-    except Exception as e:
-        return False, str(e)
+    except sqlite3.IntegrityError as e:
+        msg = str(e).lower()
+        if "users.username" in msg or "username" in msg:
+            return False, "Username already exists"
+        if "users.email" in msg or "email" in msg:
+            return False, "Email already exists"
+        return False, "User already exists"
+    except Exception:
+        return False, "Database error while creating user"
     finally:
         conn.close()
 

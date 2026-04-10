@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
 from backend.api.security import decode_token
+from database import auth as db_auth
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -37,7 +38,7 @@ async def get_current_user(
         )
     try:
         payload = decode_token(creds.credentials)
-    except JWTError:
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -59,7 +60,7 @@ async def get_current_user_bearer_or_query(
         )
     try:
         payload = decode_token(raw)
-    except JWTError:
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -69,6 +70,10 @@ async def get_current_user_bearer_or_query(
 
 
 async def require_admin(user: Annotated[dict, Depends(get_current_user)]) -> dict:
-    if (user.get("role") or "").lower() != "admin":
+    # Validate admin privilege against current DB state, not only JWT claims.
+    # This avoids stale-token mismatches where /auth/me shows admin but
+    # admin-protected routes still reject based on old token role.
+    row = db_auth.get_user_by_id(int(user["id"]))
+    if not row or (row.get("role") or "").lower() != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user

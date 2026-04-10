@@ -12,6 +12,7 @@ import { EnvironmentPage } from './pages/EnvironmentPage'
 import { ExperimentsModulePage } from './pages/ExperimentsModulePage'
 import { LarvalPage } from './pages/LarvalPage'
 import { ProtocolBuilderPage } from './pages/ProtocolBuilderPage'
+import { CalibrationPage } from './pages/CalibrationPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="adult" element={<AdultPage />} />
               <Route path="larval" element={<LarvalPage />} />
               <Route path="environment" element={<EnvironmentPage />} />
+              <Route path="calibration" element={<CalibrationPage />} />
               <Route path="protocol-builder" element={<ProtocolBuilderPage />} />
               <Route path="experiments" element={<ExperimentsModulePage />} />
               <Route path="dashboard" element={<DashboardPage />} />

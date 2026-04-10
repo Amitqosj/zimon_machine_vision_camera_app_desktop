@@ -14,6 +14,7 @@ from backend.api.schemas import (
     UserOut,
 )
 from database import auth as db_auth
+from database import notifications as db_notifications
 
 logger = logging.getLogger("zimon.api.auth")
 
@@ -40,7 +41,7 @@ def create_student(
         role=db_auth.ROLE_STUDENT,
     )
     if not ok:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to create student")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(result or "Unable to create student"))
     created = db_auth.get_user_by_id(int(result))
     db_auth.write_audit_log(
         action="ADMIN_CREATE_STUDENT",
@@ -48,6 +49,11 @@ def create_student(
         target_user_id=created["id"],
         ip_address=request.client.host if request.client else None,
         description=f"Admin created student {created['username']}",
+    )
+    db_notifications.create_notification(
+        title="Student added",
+        message=f"Admin {admin.get('username', 'admin')} added student {created['username']}.",
+        user_id=None,
     )
     return created
 

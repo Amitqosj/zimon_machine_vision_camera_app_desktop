@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from backend.api import qt_bridge
 from backend.api.deps import get_current_user, get_current_user_bearer_or_query
 from backend.api.schemas import CameraSettingRequest
+from database import notifications as db_notifications
 
 router = APIRouter(prefix="/camera", tags=["camera"])
 
@@ -59,13 +60,18 @@ def preview_stop(camera_name: str, _user: dict = Depends(get_current_user)):
 
 
 @router.post("/settings")
-def camera_settings(body: CameraSettingRequest, camera_name: str, _user: dict = Depends(get_current_user)):
+def camera_settings(body: CameraSettingRequest, camera_name: str, user: dict = Depends(get_current_user)):
     try:
         ok = qt_bridge.set_camera_setting(camera_name, body.setting, body.value)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not ok:
         raise HTTPException(status_code=400, detail="Setting not applied")
+    db_notifications.create_notification(
+        title="Environment updated",
+        message=f"{user.get('username', 'user')} updated camera '{camera_name}' setting '{body.setting}'.",
+        user_id=int(user["id"]),
+    )
     return {"ok": True}
 
 

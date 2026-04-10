@@ -77,4 +77,9 @@ export const ZIMON_API = {
     zebrazoomTest: '/api/settings/zebrazoom/test',
     zebrazoomStatus: '/api/settings/zebrazoom/status',
   },
+  notifications: {
+    list: '/api/notifications',
+    markAsRead: (id: number) => `/api/notifications/mark-as-read/${id}`,
+    calibrationCompleted: '/api/notifications/calibration-completed',
+  },
 } as const
