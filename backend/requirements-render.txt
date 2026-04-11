@@ -1,0 +1,2 @@
+# Shim: include cloud dependencies from repository root (pip resolves -r relative to this file).
+-r ../requirements-render.txt
