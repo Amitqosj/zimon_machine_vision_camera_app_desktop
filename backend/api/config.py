@@ -1,7 +1,18 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
+
+_root = Path(__file__).resolve().parents[2]
+_backend = Path(__file__).resolve().parents[1]
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(_root / ".env")
+    load_dotenv(_backend / ".env", override=True)
+except ImportError:
+    pass
 
 
 def _default_api_host() -> str:
