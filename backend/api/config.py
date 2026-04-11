@@ -4,6 +4,25 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings
 
 
+def _default_api_host() -> str:
+    if os.environ.get("ZIMON_API_HOST"):
+        return os.environ["ZIMON_API_HOST"]
+    # Render, Railway, Heroku, etc. set PORT — bind on all interfaces.
+    if os.environ.get("PORT"):
+        return "0.0.0.0"
+    return "127.0.0.1"
+
+
+def _default_api_port() -> int:
+    raw = os.environ.get("PORT") or os.environ.get("ZIMON_API_PORT", "8010")
+    return int(raw)
+
+
+# Local dev: 127.0.0.1:8010. Cloud: 0.0.0.0:$PORT. Frontend `VITE_API_URL` must match the public API URL.
+API_HOST = _default_api_host()
+API_PORT = _default_api_port()
+
+
 class Settings(BaseSettings):
     api_title: str = "ZIMON API"
     secret_key: str = os.environ.get("ZIMON_JWT_SECRET", "change-me-in-production-use-long-random-string")

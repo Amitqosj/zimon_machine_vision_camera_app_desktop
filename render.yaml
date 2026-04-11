@@ -1,0 +1,36 @@
+# Render Blueprint — adjust service names and env in the dashboard after connect.
+# New → Blueprint → select repo → apply. Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: zimon-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.8"
+      - key: ZIMON_DISABLE_QT
+        value: "1"
+      - key: ZIMON_JWT_SECRET
+        generateValue: true
+      - key: ZIMON_CORS_ORIGINS
+        sync: false
+      # Optional: SQLite on a Render Disk mount, e.g. mount at /data
+      # - key: ZIMON_DATABASE_PATH
+      #   value: /data/zimon_app.db
+
+  - type: web
+    name: zimon-frontend
+    runtime: static
+    region: oregon
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false

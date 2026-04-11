@@ -100,13 +100,13 @@ export function PremiumBrandPanel() {
   const [imgFailed, setImgFailed] = useState(false)
 
   return (
-    <div className="relative flex min-h-[300px] w-full flex-col items-center justify-center overflow-hidden bg-[#050b18] px-6 py-12 sm:min-h-[340px] sm:py-14 lg:min-h-0 lg:w-[46%] lg:max-w-none lg:rounded-none lg:py-10 rounded-t-[1.75rem] lg:rounded-l-[1.75rem] lg:rounded-tr-none">
+    <div className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#050b18] px-6 py-12 sm:py-14 lg:min-h-0 lg:py-10">
       {!heroFailed ? (
         <>
           <img
             src={ZIMON_BRAND_HERO_URL}
             alt="ZIMON — Zebrafish Integrated Motion and Optical Neuroanalysis Chamber"
-            className={`absolute inset-0 z-0 h-full w-full object-cover object-center transition-opacity duration-700 ${
+            className={`absolute inset-0 z-0 h-full w-full min-h-0 object-cover object-center transition-opacity duration-700 ${
               heroOk ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setHeroOk(true)}
@@ -153,8 +153,9 @@ export function PremiumBrandPanel() {
       {heroFailed ? <BrandFishDecor /> : null}
 
       {heroFailed ? (
-        <div className="relative z-10 flex max-w-md flex-col items-center text-center">
-          <div className="relative mb-1 h-40 w-40 sm:h-48 sm:w-48">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center text-center">
+          <div className="flex max-w-md flex-col items-center">
+            <div className="relative mb-1 h-40 w-40 sm:h-48 sm:w-48">
             <div
               className="absolute -inset-3 rounded-full bg-cyan-400/10 blur-2xl animate-orb-glow"
               aria-hidden
@@ -185,11 +186,12 @@ export function PremiumBrandPanel() {
             </div>
           </div>
 
-          <ZimonWordmark />
-          <p className="mt-4 max-w-[19rem] px-1 text-[9px] font-medium uppercase leading-relaxed tracking-[0.18em] text-slate-300/90 sm:max-w-md sm:text-[10px] sm:tracking-[0.22em]">
-            Zebrafish Integrated <span className="font-semibold text-cyan-300">Motion</span> &amp;
-            Optical Neuroanalysis Chamber
-          </p>
+            <ZimonWordmark />
+            <p className="mt-4 max-w-[19rem] px-1 text-[9px] font-medium uppercase leading-relaxed tracking-[0.18em] text-slate-300/90 sm:max-w-md sm:text-[10px] sm:tracking-[0.22em]">
+              Zebrafish Integrated <span className="font-semibold text-cyan-300">Motion</span> &amp;
+              Optical Neuroanalysis Chamber
+            </p>
+          </div>
         </div>
       ) : (
         <span className="sr-only">

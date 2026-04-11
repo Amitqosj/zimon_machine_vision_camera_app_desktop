@@ -4,6 +4,7 @@ camera stack as the desktop app can be used by the API process.
 """
 from __future__ import annotations
 
+import os
 import queue
 import sys
 import threading
@@ -12,6 +13,10 @@ from typing import Any, Callable, Optional, TypeVar
 import numpy as np
 
 T = TypeVar("T")
+
+
+def is_qt_stack_enabled() -> bool:
+    return os.environ.get("ZIMON_DISABLE_QT", "").lower() not in ("1", "true", "yes")
 
 _call_queue: queue.Queue = queue.Queue()
 _qt_ready = threading.Event()
@@ -74,6 +79,8 @@ _qt_thread: Optional[threading.Thread] = None
 
 def start_qt_thread() -> None:
     global _qt_thread
+    if not is_qt_stack_enabled():
+        return
     if _qt_thread is not None and _qt_thread.is_alive():
         return
     _qt_ready.clear()
@@ -84,6 +91,8 @@ def start_qt_thread() -> None:
 
 
 def run_on_qt(fn: Callable[..., T], *args, **kwargs) -> T:
+    if not is_qt_stack_enabled():
+        raise RuntimeError("Camera/Qt stack is disabled (ZIMON_DISABLE_QT)")
     if not _qt_ready.is_set():
         _qt_ready.wait(timeout=120)
     resq: queue.Queue = queue.Queue(maxsize=1)
@@ -95,10 +104,15 @@ def run_on_qt(fn: Callable[..., T], *args, **kwargs) -> T:
 
 
 def list_cameras() -> list[str]:
+    if not is_qt_stack_enabled():
+        return []
     return run_on_qt(lambda: _camera_controller.list_cameras())
 
 
 def refresh_cameras() -> list[str]:
+    if not is_qt_stack_enabled():
+        return []
+
     def _refresh():
         _camera_controller.refresh_cameras()
         return _camera_controller.list_cameras()
@@ -107,6 +121,8 @@ def refresh_cameras() -> list[str]:
 
 
 def start_preview(camera_name: str) -> bool:
+    if not is_qt_stack_enabled():
+        return False
     cb = _make_stream_callback()
 
     def _start():
@@ -116,11 +132,16 @@ def start_preview(camera_name: str) -> bool:
 
 
 def stop_preview(camera_name: str) -> None:
+    if not is_qt_stack_enabled():
+        return
     run_on_qt(lambda: _camera_controller.stop_preview(camera_name))
 
 
 def list_previewing_cameras() -> list[str]:
     """Camera names with an active preview worker (same as PyQt 'streaming' state)."""
+
+    if not is_qt_stack_enabled():
+        return []
 
     def _fn():
         if _camera_controller is None:
@@ -131,10 +152,15 @@ def list_previewing_cameras() -> list[str]:
 
 
 def set_camera_setting(camera_name: str, setting: str, value: Any) -> bool:
+    if not is_qt_stack_enabled():
+        return False
     return run_on_qt(lambda: _camera_controller.set_setting(camera_name, setting, value))
 
 
 def get_camera_meta(camera_name: str) -> dict[str, Any]:
+    if not is_qt_stack_enabled():
+        return {}
+
     def _meta():
         c = _camera_controller
         if camera_name not in c.cameras:
@@ -151,11 +177,16 @@ def get_camera_meta(camera_name: str) -> dict[str, Any]:
 
 
 def get_stream_jpeg() -> Optional[bytes]:
+    if not is_qt_stack_enabled():
+        return None
     with _stream_lock:
         return _stream_jpeg
 
 
 def supported_resolutions(camera_name: str) -> list[tuple[int, int]]:
+    if not is_qt_stack_enabled():
+        return []
+
     def _fn():
         return list(_camera_controller.get_supported_resolutions(camera_name))
 
@@ -169,6 +200,9 @@ class QtCameraForExperimentRunner:
     """
 
     def start_recording(self, camera_list: list, prefix: str) -> bool:
+        if not is_qt_stack_enabled():
+            return False
+
         def _fn():
             if _camera_controller is None:
                 return False
@@ -183,6 +217,9 @@ class QtCameraForExperimentRunner:
             return False
 
     def stop_recording(self) -> None:
+        if not is_qt_stack_enabled():
+            return
+
         def _fn():
             if _camera_controller is None:
                 return

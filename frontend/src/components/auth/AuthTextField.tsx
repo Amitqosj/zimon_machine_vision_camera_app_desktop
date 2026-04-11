@@ -17,7 +17,7 @@ export function AuthTextField({
 }: Props) {
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-semibold text-slate-800">
+      <label htmlFor={id} className="block text-sm font-extrabold text-slate-800">
         {label}
       </label>
       <div className="group relative mt-2">
@@ -27,7 +27,7 @@ export function AuthTextField({
         />
         <input
           id={id}
-          className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 text-[0.9375rem] text-slate-900 shadow-sm placeholder:text-slate-500 outline-none ring-0 transition-all duration-200 hover:border-slate-300 hover:bg-white focus:border-[#1e3a5f]/55 focus:bg-white focus:shadow-[0_0_0_3px_rgba(30,58,95,0.14)] ${
+          className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-11 text-[0.9375rem] font-extrabold text-slate-900 shadow-sm placeholder:font-semibold placeholder:text-slate-500 outline-none ring-0 transition-all duration-200 hover:border-slate-300 hover:bg-white focus:border-[#1e3a5f]/55 focus:bg-white focus:shadow-[0_0_0_3px_rgba(30,58,95,0.14)] ${
             rightSlot ? 'pr-11' : 'pr-4'
           }`}
           {...inputProps}

@@ -69,16 +69,16 @@ export function LoginPage() {
       brand={<PremiumBrandPanel />}
       footer={<AuthStatusBar mode="login-card" />}
     >
-      <div className="flex flex-1 flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:px-12 xl:px-14">
-        <div className="mx-auto w-full max-w-[400px]">
-          <h2 className="text-3xl font-bold tracking-tight text-[#0a192f] sm:text-[2rem] sm:leading-tight">
+      <div className="box-border w-full max-w-[400px] shrink-0 px-6 py-7 sm:px-10 sm:py-9 lg:px-12 xl:px-14">
+        <div className="w-full">
+          <h2 className="text-3xl font-extrabold tracking-tight text-[#0a192f] sm:text-[2rem] sm:leading-tight">
             Welcome to ZIMON
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
             Zebrafish Integrated Motion &amp; Optical Neuroanalysis Chamber
           </p>
 
-          <form onSubmit={onSubmit} className="mt-9 space-y-5 sm:mt-10 sm:space-y-6">
+          <form onSubmit={onSubmit} className="mt-7 space-y-4 sm:mt-8 sm:space-y-5">
             {error ? (
               <div
                 role="alert"
@@ -124,7 +124,7 @@ export function LoginPage() {
             />
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-0.5">
-              <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm text-slate-700">
+              <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm font-bold text-slate-700">
                 <input
                   type="checkbox"
                   checked={remember}
@@ -135,7 +135,7 @@ export function LoginPage() {
               </label>
               <Link
                 to="/forgot-password"
-                className="text-sm font-semibold text-[#1e3a5f] underline-offset-2 transition hover:text-[#152a45] hover:underline"
+                className="text-sm font-extrabold text-[#1e3a5f] underline-offset-2 transition hover:text-[#152a45] hover:underline"
               >
                 Forgot Password?
               </Link>
@@ -144,7 +144,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={busy}
-              className="group mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1e3a5f] via-[#1a3254] to-[#152a45] py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-950/25 transition hover:shadow-xl hover:shadow-blue-950/30 hover:brightness-[1.03] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-55"
+              className="group mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#1e3a5f] via-[#1a3254] to-[#152a45] py-3.5 text-base font-bold text-white shadow-lg shadow-blue-950/25 transition hover:shadow-xl hover:shadow-blue-950/30 hover:brightness-[1.03] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-55"
             >
               {busy ? 'Signing in…' : 'Login'}
               {!busy ? (

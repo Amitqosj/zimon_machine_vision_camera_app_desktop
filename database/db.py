@@ -1,7 +1,8 @@
 import os
 import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "zimon_app.db")
+_default_db = os.path.join(os.path.dirname(__file__), "zimon_app.db")
+DB_PATH = os.environ.get("ZIMON_DATABASE_PATH", _default_db)
 
 
 def get_connection():

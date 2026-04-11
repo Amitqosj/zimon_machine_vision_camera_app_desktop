@@ -121,14 +121,14 @@ export function AuthStatusBar({ mode }: Props) {
   return (
     <div className="border-t border-slate-200" role="status" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-slate-50 px-4 py-2.5 sm:px-5">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold tracking-[0.24em] text-[#1e3a5f]">ZIMON</span>
-          <span className="hidden h-4 w-px bg-slate-200 sm:block" aria-hidden />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Hardware status
+        <div className="min-w-0 shrink">
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1e3a5f] sm:text-xs sm:tracking-[0.18em]">
+            ZIMON Hardware Status
           </span>
         </div>
-        <span className="text-[10px] text-slate-500">Camera · Chamber · Environment</span>
+        <span className="hidden shrink-0 text-[10px] text-slate-500 sm:inline">
+          Camera · Chamber · Environment
+        </span>
       </div>
       <div className="grid grid-cols-3 bg-gradient-to-b from-slate-50 to-slate-100 text-[11px] font-semibold tracking-wide text-slate-700 sm:text-xs">
         <div className="flex flex-col items-center justify-center gap-1 border-r border-slate-200/80 py-3.5 px-2 sm:flex-row sm:gap-2 sm:py-4">

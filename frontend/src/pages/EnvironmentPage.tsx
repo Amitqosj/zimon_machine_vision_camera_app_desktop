@@ -305,7 +305,7 @@ export function EnvironmentPage() {
       <p className="text-[11px] leading-relaxed text-gray-500 border border-zimon-border/80 rounded-lg bg-zimon-card/40 px-3 py-2">
         This screen talks to the{' '}
         <span className="text-gray-400">FastAPI</span> process (same Arduino/camera stack as the desktop app when you
-        run <span className="font-mono text-gray-400">uvicorn backend.api.main:app</span>). Only one app can hold the
+        run <span className="font-mono text-gray-400">python -m backend.api</span>). Only one app can hold the
         serial port — quit PyQt or disconnect there before connecting here.
       </p>
       {!arduinoOk ? (

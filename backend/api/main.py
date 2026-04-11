@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.config import get_settings
-from backend.api.qt_bridge import start_qt_thread
+from backend.api.qt_bridge import is_qt_stack_enabled, start_qt_thread
 from backend.api.routers import (
     analysis,
     arduino,
@@ -27,11 +27,14 @@ logger = logging.getLogger("zimon.api")
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized for API")
-    try:
-        start_qt_thread()
-        logger.info("Qt camera thread started")
-    except Exception as e:
-        logger.exception("Qt camera thread failed to start: %s", e)
+    if is_qt_stack_enabled():
+        try:
+            start_qt_thread()
+            logger.info("Qt camera thread started")
+        except Exception as e:
+            logger.exception("Qt camera thread failed to start: %s", e)
+    else:
+        logger.info("Qt/camera stack skipped (ZIMON_DISABLE_QT)")
     yield
 
 

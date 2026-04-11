@@ -3,12 +3,13 @@ import type { ReactNode } from 'react'
 type Props = {
   brand: ReactNode
   children: ReactNode
-  /** Omit on register / forgot-password when no hardware strip is needed */
+  /** When set (e.g. login), hardware strip is pinned to the bottom of the right (login) column */
   footer?: ReactNode
 }
 
 /**
- * Full-viewport backdrop (matches app light/dark theme) + centered card (split brand | form + optional footer).
+ * Full-viewport backdrop + centered card. Left column is image-only (full height). Optional `footer`
+ * renders at the bottom of the right column under the form. Equal column heights on lg via flex stretch.
  */
 export function AuthPremiumShell({ brand, children, footer }: Props) {
   return (
@@ -30,12 +31,22 @@ export function AuthPremiumShell({ brand, children, footer }: Props) {
       />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-3 py-8 sm:px-4 sm:py-10 md:px-6 md:py-14">
-        <div className="auth-card-enter w-full max-w-[1040px] overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white text-slate-900 shadow-[0_24px_80px_-28px_rgba(15,23,42,0.18),0_0_0_1px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:shadow-[0_32px_100px_-20px_rgba(0,0,0,0.65),0_0_0_1px_rgba(255,255,255,0.05)_inset]">
-          <div className="flex min-h-0 flex-col lg:min-h-[540px] lg:flex-row">
-            {brand}
-            <div className="flex min-w-0 flex-1 flex-col bg-white text-slate-900">{children}</div>
+        <div className="auth-card-enter flex w-full max-w-[1040px] min-h-0 flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/90 bg-white text-slate-900 shadow-[0_24px_80px_-28px_rgba(15,23,42,0.18),0_0_0_1px_rgba(15,23,42,0.04)] dark:border-white/[0.08] dark:shadow-[0_32px_100px_-20px_rgba(0,0,0,0.65),0_0_0_1px_rgba(255,255,255,0.05)_inset]">
+          <div className="flex min-h-0 flex-1 flex-col lg:min-h-[400px] lg:flex-row lg:items-stretch">
+            {/* Left: hero / brand only — full column height for image */}
+            <div className="flex min-h-0 w-full min-w-0 flex-col self-stretch lg:w-[46%] lg:flex-shrink-0">
+              <div className="relative flex min-h-[170px] flex-1 flex-col overflow-hidden rounded-t-[1.75rem] sm:min-h-[200px] lg:h-full lg:min-h-0 lg:flex-1 lg:rounded-bl-[1.75rem] lg:rounded-tl-[1.75rem] lg:rounded-tr-none">
+                {brand}
+              </div>
+            </div>
+            {/* Right: form (centered) + optional hardware strip at bottom */}
+            <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col self-stretch rounded-b-[1.75rem] bg-white text-slate-900 lg:rounded-br-[1.75rem] lg:rounded-tr-[1.75rem]">
+              <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center">
+                {children}
+              </div>
+              {footer ? <div className="w-full shrink-0">{footer}</div> : null}
+            </div>
           </div>
-          {footer ?? null}
         </div>
       </div>
     </div>

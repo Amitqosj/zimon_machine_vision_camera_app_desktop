@@ -1,0 +1,10 @@
+# Optional camera SDKs — NOT on PyPI. Install from vendor only if you need these cameras.
+#
+# FLIR / Teledyne Spinnaker (Python):
+#   Download "Spinnaker SDK" for Windows from Teledyne FLIR, then install the matching
+#   PySpin / spinnaker_python wheel from the SDK folder (version varies by camera).
+#   Do not add "Spinnaker" to pip requirements — it will fail on pip install.
+#
+# Basler pypylon (often available on PyPI):
+#   pip install pypylon
+#

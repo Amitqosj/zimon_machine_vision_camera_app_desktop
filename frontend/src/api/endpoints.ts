@@ -1,10 +1,10 @@
 /**
- * FastAPI route map (prefix `/api`). Base URL: `VITE_API_URL` or http://127.0.0.1:8000
+ * FastAPI route map (prefix `/api`). Base URL: `VITE_API_URL` or http://127.0.0.1:8010
  *
  * Auth: `Authorization: Bearer <token>` on all routes except `/api/auth/*`, `/api/health`,
  * and camera stream/snapshot (Bearer or `?access_token=`).
  *
- * Run API: `uvicorn backend.api.main:app --host 127.0.0.1 --port 8000` from repo root (venv).
+ * Run API: `scripts/run-api.ps1` or `python -m backend.api` — port is fixed in `backend/api/config.py` (8010).
  * PyQt (`python main.py`) uses in-process Arduino/camera; web UI needs the API process — do not
  * share the same COM port between PyQt and the API at once.
  */

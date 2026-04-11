@@ -33,8 +33,8 @@ export function ForgotPasswordPage() {
 
   return (
     <AuthPremiumShell brand={<PremiumBrandPanel />}>
-      <div className="flex flex-1 flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:px-12 xl:px-14">
-        <div className="mx-auto w-full max-w-[400px]">
+      <div className="box-border w-full max-w-[400px] shrink-0 px-6 py-7 sm:px-10 sm:py-9 lg:px-12 xl:px-14">
+        <div className="w-full">
           <h2 className="text-3xl font-bold tracking-tight text-[#0a192f] sm:text-[2rem] sm:leading-tight">
             Forgot password?
           </h2>
@@ -44,7 +44,7 @@ export function ForgotPasswordPage() {
           </p>
 
           {done ? (
-            <div className="mt-9 space-y-6 sm:mt-10">
+            <div className="mt-7 space-y-5 sm:mt-8">
               <div
                 role="status"
                 className="rounded-xl border border-emerald-200/80 bg-emerald-50/90 px-4 py-4 text-sm leading-relaxed text-emerald-950 shadow-sm"
@@ -63,7 +63,7 @@ export function ForgotPasswordPage() {
               </Link>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="mt-9 space-y-6 sm:mt-10">
+            <form onSubmit={onSubmit} className="mt-7 space-y-5 sm:mt-8">
               {error ? (
                 <div
                   role="alert"
