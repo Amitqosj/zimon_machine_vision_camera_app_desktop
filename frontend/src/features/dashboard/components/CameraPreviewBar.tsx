@@ -36,7 +36,7 @@ export function CameraPreviewBar({
   return (
     <div
       className={[
-        'flex min-h-0 items-center gap-2 overflow-x-auto rounded-xl border border-zimon-border/60 bg-zimon-card/90 py-1.5 pl-2.5 pr-2 shadow-sm backdrop-blur-sm dark:border-cyan-500/12 dark:bg-slate-950/70 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
+        'flex min-h-[2.75rem] flex-wrap items-center gap-x-2 gap-y-2 overflow-x-auto rounded-xl border border-zimon-border/60 bg-zimon-card/90 py-2 pl-2.5 pr-2.5 shadow-sm backdrop-blur-sm dark:border-cyan-500/12 dark:bg-slate-950/70 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
         className,
       ]
         .filter(Boolean)

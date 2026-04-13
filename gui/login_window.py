@@ -1,18 +1,430 @@
-from PyQt6.QtCore import pyqtSignal
+"""ZIMON PyQt login — split branding / form layout using assets from gui/images."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from PyQt6.QtCore import Qt, QRect, QSettings, pyqtSignal
+from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
+    QCheckBox,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
-    QSizePolicy,
     QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from database.auth import login_user
-from gui.register_window import RegisterWindow
+from database.auth import verify_login_credentials, set_active_session
+
+_IMAGES_DIR = Path(__file__).resolve().parent / "images"
+
+# Large-screen layout (login + forgot password)
+WINDOW_W = 1200
+WINDOW_H = 760
+CARD_W = 1040
+CARD_H = 660
+LEFT_W = 460
+MARGIN_X = (WINDOW_W - CARD_W) // 2
+MARGIN_Y = (WINDOW_H - CARD_H) // 2
+
+
+def _pixmap(path: Path, max_w: int, max_h: int) -> QPixmap | None:
+    if not path.is_file():
+        return None
+    pm = QPixmap(str(path))
+    if pm.isNull():
+        return None
+    return pm.scaled(
+        max_w,
+        max_h,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
+
+def _zimon11_paths() -> list[Path]:
+    base = _IMAGES_DIR / "zimon11"
+    return [base.with_suffix(".jpeg"), base.with_suffix(".jpg"), base.with_suffix(".png")]
+
+
+def _hero_pixmap_cover(target_w: int, target_h: int) -> QPixmap | None:
+    """Load zimon11 (jpeg/jpg/png) and scale+crop to exactly fill the left panel."""
+    pm0: QPixmap | None = None
+    for p in _zimon11_paths():
+        if p.is_file():
+            pm0 = QPixmap(str(p))
+            if not pm0.isNull():
+                break
+    if pm0 is None or pm0.isNull():
+        return None
+    scaled = pm0.scaled(
+        target_w,
+        target_h,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    x = max(0, (scaled.width() - target_w) // 2)
+    y = max(0, (scaled.height() - target_h) // 2)
+    return scaled.copy(QRect(x, y, target_w, target_h))
+
+
+def styled_input_row(glyph: str, placeholder: str) -> tuple[QFrame, QLineEdit]:
+    wrap = QFrame()
+    wrap.setObjectName("loginInputShell")
+    hl = QHBoxLayout(wrap)
+    hl.setContentsMargins(0, 0, 0, 0)
+    hl.setSpacing(0)
+    g = QLabel(glyph)
+    g.setObjectName("loginInputGlyph")
+    hl.addWidget(g)
+    edit = QLineEdit()
+    edit.setObjectName("loginLineInner")
+    edit.setPlaceholderText(placeholder)
+    hl.addWidget(edit, 1)
+    return wrap, edit
+
+
+def brand_hero_left_panel() -> QFrame:
+    """Left column: full zimon11 hero or text fallback (shared login / forgot)."""
+    left = QFrame()
+    left.setObjectName("loginBrandPanel")
+    left.setFixedSize(LEFT_W, CARD_H)
+    left_lay = QVBoxLayout(left)
+    left_lay.setContentsMargins(0, 0, 0, 0)
+    left_lay.setSpacing(0)
+
+    hero_pm = _hero_pixmap_cover(LEFT_W, CARD_H)
+    if hero_pm:
+        hero = QLabel()
+        hero.setObjectName("loginHeroImage")
+        hero.setPixmap(hero_pm)
+        hero.setFixedSize(LEFT_W, CARD_H)
+        hero.setScaledContents(False)
+        hero.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_lay.addWidget(hero, 1)
+    else:
+        left_lay.setContentsMargins(28, 36, 28, 28)
+        left_lay.setSpacing(16)
+        left_lay.addStretch(1)
+        logo_lbl = QLabel()
+        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_pm = _pixmap(_IMAGES_DIR / "zimon-logo.png", 220, 220)
+        if logo_pm:
+            logo_lbl.setPixmap(logo_pm)
+        else:
+            logo_lbl.setText("ZIMON")
+            logo_lbl.setStyleSheet("color: #ffffff; font-size: 42px; font-weight: 800;")
+        left_lay.addWidget(logo_lbl)
+        zimon_title = QLabel("ZIMON")
+        zimon_title.setObjectName("loginBrandTitle")
+        zimon_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        f = QFont()
+        f.setPointSize(26)
+        f.setWeight(QFont.Weight.Bold)
+        zimon_title.setFont(f)
+        left_lay.addWidget(zimon_title)
+        chamber_line = QLabel(
+            "ZEBRAFISH INTEGRATED MOTION &\nOPTICAL NEUROANALYSIS CHAMBER"
+        )
+        chamber_line.setObjectName("loginBrandSubtitle")
+        chamber_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        chamber_line.setWordWrap(True)
+        left_lay.addWidget(chamber_line)
+        left_lay.addStretch(2)
+    return left
+
+
+def _hardware_vsep() -> QFrame:
+    line = QFrame()
+    line.setObjectName("loginHardwareVSep")
+    line.setFixedWidth(1)
+    return line
+
+
+def login_hardware_status_strip() -> QFrame:
+    """Bottom strip on the login column (reference: ZIMON HARDWARE STATUS)."""
+    strip = QFrame()
+    strip.setObjectName("loginHardwareStrip")
+    strip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    root = QVBoxLayout(strip)
+    root.setContentsMargins(20, 14, 20, 16)
+    root.setSpacing(12)
+
+    head = QHBoxLayout()
+    head.setSpacing(12)
+    title = QLabel("ZIMON HARDWARE STATUS")
+    title.setObjectName("loginHardwareTitle")
+    cats = QLabel("Camera • Chamber • Environment")
+    cats.setObjectName("loginHardwareCats")
+    cats.setAlignment(
+        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+    )
+    head.addWidget(title, 0)
+    head.addStretch(1)
+    head.addWidget(cats, 0)
+    root.addLayout(head)
+
+    hline = QFrame()
+    hline.setObjectName("loginHardwareHSep")
+    hline.setFrameShape(QFrame.Shape.NoFrame)
+    hline.setFixedHeight(1)
+    root.addWidget(hline)
+
+    row = QHBoxLayout()
+    row.setSpacing(0)
+    row.setContentsMargins(0, 4, 0, 0)
+
+    def cell(icon: str, body: QWidget) -> QWidget:
+        w = QWidget()
+        w.setObjectName("loginHardwareCell")
+        hl = QHBoxLayout(w)
+        hl.setContentsMargins(14, 10, 14, 10)
+        hl.setSpacing(10)
+        ic = QLabel(icon)
+        ic.setObjectName("loginHardwareIcon")
+        hl.addWidget(ic, 0, Qt.AlignmentFlag.AlignTop)
+        hl.addWidget(body, 1, Qt.AlignmentFlag.AlignVCenter)
+        return w
+
+    cam_inner = QHBoxLayout()
+    cam_inner.setContentsMargins(0, 0, 0, 0)
+    cam_inner.setSpacing(6)
+    cam_l = QLabel("Camera")
+    cam_l.setObjectName("loginHardwareLabel")
+    cam_dots = QLabel("…")
+    cam_dots.setObjectName("loginHardwareMuted")
+    cam_inner.addWidget(cam_l)
+    cam_inner.addWidget(cam_dots)
+    cam_inner.addStretch(1)
+    cam_wrap = QWidget()
+    cam_wrap.setObjectName("loginHardwareRowInner")
+    cam_wrap.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    cam_wrap.setLayout(cam_inner)
+
+    ch_inner = QHBoxLayout()
+    ch_inner.setContentsMargins(0, 0, 0, 0)
+    ch_inner.setSpacing(6)
+    ch_l = QLabel("Chamber")
+    ch_l.setObjectName("loginHardwareLabel")
+    ch_st = QLabel("Idle")
+    ch_st.setObjectName("loginHardwareStatusIdle")
+    ch_inner.addWidget(ch_l)
+    ch_inner.addWidget(ch_st)
+    ch_inner.addStretch(1)
+    ch_wrap = QWidget()
+    ch_wrap.setObjectName("loginHardwareRowInner")
+    ch_wrap.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    ch_wrap.setLayout(ch_inner)
+
+    tp_inner = QHBoxLayout()
+    tp_inner.setContentsMargins(0, 0, 0, 0)
+    tp_inner.setSpacing(6)
+    tp_l = QLabel("Temperature")
+    tp_l.setObjectName("loginHardwareLabel")
+    tp_st = QLabel("OK")
+    tp_st.setObjectName("loginHardwareStatusOk")
+    tp_inner.addWidget(tp_l)
+    tp_inner.addWidget(tp_st)
+    tp_inner.addStretch(1)
+    tp_wrap = QWidget()
+    tp_wrap.setObjectName("loginHardwareRowInner")
+    tp_wrap.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    tp_wrap.setLayout(tp_inner)
+
+    row.addWidget(cell("📷", cam_wrap), 1)
+    row.addWidget(_hardware_vsep(), 0)
+    row.addWidget(cell("⚙", ch_wrap), 1)
+    row.addWidget(_hardware_vsep(), 0)
+    row.addWidget(cell("🌡", tp_wrap), 1)
+    root.addLayout(row)
+
+    strip.setMinimumHeight(108)
+    return strip
+
+
+AUTH_SHELL_QSS = """
+            QWidget#loginRootOuter {
+                background-color: #0c1222;
+            }
+            QFrame#loginShellCard {
+                background-color: #ffffff;
+                border-radius: 20px;
+                border: 1px solid #1e293b;
+            }
+            QFrame#loginBrandPanel {
+                background-color: #0a1630;
+                border-top-left-radius: 20px;
+                border-bottom-left-radius: 20px;
+                border-right: 1px solid rgba(255,255,255,0.08);
+            }
+            QLabel#loginHeroImage {
+                background-color: #0a1630;
+                border-top-left-radius: 20px;
+                border-bottom-left-radius: 20px;
+            }
+            QLabel#loginBrandSubtitle {
+                color: rgba(255,255,255,0.88);
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.12em;
+                line-height: 1.45;
+            }
+            QLabel#loginBrandTitle {
+                color: #ffffff;
+                letter-spacing: 0.08em;
+            }
+            QFrame#loginFormPanel {
+                background-color: #ffffff;
+                border-top-right-radius: 20px;
+                border-bottom-right-radius: 20px;
+            }
+            QWidget#loginFormBlock {
+                background-color: #ffffff;
+            }
+            QFrame#loginHardwareStrip {
+                background-color: #ffffff;
+                border-top: 1px solid #e2e8f0;
+                border-bottom-right-radius: 20px;
+            }
+            QLabel#loginHardwareTitle {
+                color: #0f172a;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.12em;
+            }
+            QLabel#loginHardwareCats {
+                color: #64748b;
+                font-size: 10px;
+                font-weight: 500;
+            }
+            QFrame#loginHardwareHSep {
+                background-color: #e2e8f0;
+                border: none;
+            }
+            QFrame#loginHardwareVSep {
+                background-color: #e2e8f0;
+                border: none;
+            }
+            QWidget#loginHardwareCell {
+                background-color: #ffffff;
+            }
+            QWidget#loginHardwareRowInner {
+                background-color: #ffffff;
+            }
+            QLabel#loginHardwareIcon {
+                color: #0f172a;
+                font-size: 15px;
+            }
+            QLabel#loginHardwareLabel {
+                color: #0f172a;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QLabel#loginHardwareMuted {
+                color: #64748b;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QLabel#loginHardwareStatusIdle {
+                color: #2563eb;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLabel#loginHardwareStatusOk {
+                color: #15803d;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QLabel#loginWelcomeTitle {
+                color: #0f172a;
+                font-size: 28px;
+                font-weight: 700;
+            }
+            QLabel#loginWelcomeSub {
+                color: #64748b;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QLabel#loginFieldCaption {
+                color: #334155;
+                font-size: 13px;
+                font-weight: 600;
+            }
+            QFrame#loginInputShell {
+                background-color: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 12px;
+                min-height: 45px;
+            }
+            QLineEdit#loginLineInner {
+                border: none;
+                background: transparent;
+                padding: 12px 10px;
+                font-size: 15px;
+                color: #0f172a;
+            }
+            QLineEdit#loginLineInner:focus {
+                background: transparent;
+            }
+            QLabel#loginInputGlyph {
+                color: #64748b;
+                font-size: 18px;
+                padding-left: 14px;
+                min-width: 32px;
+            }
+            QCheckBox#loginRemember {
+                color: #475569;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QCheckBox#loginRemember::indicator {
+                width: 16px;
+                height: 16px;
+            }
+            QPushButton#loginForgotLink {
+                color: #1d4ed8;
+                font-size: 14px;
+                font-weight: 600;
+                border: none;
+                padding: 4px 0;
+                background: transparent;
+            }
+            QPushButton#loginForgotLink:hover {
+                color: #2563eb;
+                text-decoration: underline;
+            }
+            QPushButton#loginPrimaryBtn {
+                background-color: #0f172a;
+                color: #ffffff;
+                font-size: 14px;
+                font-weight: 700;
+                border-radius: 10px;
+                border: none;
+                padding: 9px 18px;
+                min-height: 42px;
+                max-height: 44px;
+            }
+            QPushButton#loginPrimaryBtn:hover {
+                background-color: #1e293b;
+            }
+            QPushButton#loginPrimaryBtn:pressed {
+                background-color: #020617;
+            }
+            QPushButton#loginPwToggle {
+                border: none;
+                background: transparent;
+                color: #64748b;
+                font-size: 15px;
+                padding: 4px 12px;
+            }
+            QPushButton#loginPwToggle:hover {
+                color: #0f172a;
+            }
+            """
 
 
 class LoginWindow(QWidget):
@@ -20,142 +432,175 @@ class LoginWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.register_window = None
         self.forgot_password_window = None
-        self.setWindowTitle("ZIMON - Login")
-        self.setFixedSize(820, 760)
+        self._pw_visible = False
+        self._settings = QSettings("ZIMON", "DesktopLogin")
+
+        self.setWindowTitle("ZIMON — Sign in")
+        self.setFixedSize(WINDOW_W, WINDOW_H)
         self._build_ui()
+        self._apply_saved_username()
+
+    def _apply_saved_username(self):
+        if self._settings.value("remember_username", False, type=bool):
+            u = self._settings.value("saved_username", "", type=str)
+            if u:
+                self.username_or_email_input.setText(u)
+                self.remember_checkbox.setChecked(True)
 
     def _build_ui(self):
-        self.setObjectName("loginRoot")
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(24, 24, 24, 24)
-        root_layout.setSpacing(0)
+        self.setObjectName("loginRootOuter")
 
-        card_row = QHBoxLayout()
-        root_layout.addLayout(card_row)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(MARGIN_X, MARGIN_Y, MARGIN_X, MARGIN_Y)
+        outer.setSpacing(0)
 
         card = QFrame()
-        card.setObjectName("authCard")
-        card.setMinimumWidth(620)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        card_row.addStretch()
-        card_row.addWidget(card, 1)
-        card_row.addStretch()
+        card.setObjectName("loginShellCard")
+        card.setFixedSize(CARD_W, CARD_H)
+        card_row = QHBoxLayout()
+        card_row.addStretch(1)
+        card_row.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
+        card_row.addStretch(1)
+        outer.addLayout(card_row)
 
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(16)
+        shell = QHBoxLayout(card)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
 
-        brand_row = QHBoxLayout()
-        brand_badge = QLabel("🧬")
-        brand_badge.setObjectName("brandBadge")
-        brand_name = QLabel("ZIMON")
-        brand_name.setObjectName("brandTitle")
-        brand_row.addWidget(brand_badge)
-        brand_row.addWidget(brand_name)
-        brand_row.addStretch(1)
-        layout.addLayout(brand_row)
+        shell.addWidget(brand_hero_left_panel())
 
-        brand_tagline = QLabel("Behavior Tracking System")
-        brand_tagline.setObjectName("brandTagline")
-        layout.addWidget(brand_tagline)
+        # —— Right: white form column + hardware status strip (reference layout) ——
+        right = QFrame()
+        right.setObjectName("loginFormPanel")
+        right.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        outer_rv = QVBoxLayout(right)
+        outer_rv.setContentsMargins(0, 0, 0, 0)
+        outer_rv.setSpacing(0)
 
-        title = QLabel("Welcome back")
-        title.setObjectName("titleLabel")
-        subtitle = QLabel("Sign in to access the behavior tracking dashboard")
-        subtitle.setObjectName("subtitleLabel")
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
+        form_block = QWidget()
+        form_block.setObjectName("loginFormBlock")
+        form_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rv = QVBoxLayout(form_block)
+        rv.setContentsMargins(45, 45, 41, 33)
+        rv.setSpacing(19)
 
-        user_label = QLabel("Username or Email")
-        user_label.setObjectName("fieldLabel")
-        layout.addWidget(user_label)
-        self.username_or_email_input = QLineEdit()
-        self.username_or_email_input.setPlaceholderText("Username or Email")
-        self.username_or_email_input.setObjectName("fieldInput")
-        layout.addWidget(self.username_or_email_input)
+        welcome = QLabel("Welcome to ZIMON")
+        welcome.setObjectName("loginWelcomeTitle")
+        rv.addWidget(welcome)
 
-        pass_label = QLabel("Password")
-        pass_label.setObjectName("fieldLabel")
-        layout.addWidget(pass_label)
-        self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("Password")
-        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_input.setObjectName("fieldInput")
-        layout.addWidget(self.password_input)
-
-        layout.addStretch(1)
-
-        self.login_btn = QPushButton("Login")
-        self.login_btn.setObjectName("primaryBtn")
-        self.forgot_password_btn = QPushButton("Forgot Password?")
-        self.forgot_password_btn.setObjectName("secondaryBtn")
-        self.create_account_btn = QPushButton("Create Account")
-        self.create_account_btn.setObjectName("secondaryBtn")
-        layout.addWidget(self.login_btn)
-        layout.addWidget(self.forgot_password_btn)
-        layout.addWidget(self.create_account_btn)
-
-        self.setStyleSheet(
-            """
-            QWidget#loginRoot { background-color: #0f172a; }
-            QFrame#authCard { background-color: #111827; border: 1px solid #1f2937; border-radius: 14px; }
-            QLabel#titleLabel { color: #f9fafb; font-size: 24px; font-weight: 700; padding-bottom: 2px; }
-            QLabel#brandBadge {
-                min-width: 34px; max-width: 34px; min-height: 34px; max-height: 34px;
-                border-radius: 17px; color: white; font-size: 18px; font-weight: 800;
-                background-color: #2563eb; qproperty-alignment: AlignCenter;
-            }
-            QLabel#brandTitle { color: #93c5fd; font-size: 28px; font-weight: 900; letter-spacing: 1px; padding-left: 10px; }
-            QLabel#brandTagline { color: #cbd5e1; font-size: 13px; padding-bottom: 14px; }
-            QLabel#subtitleLabel { color: #9ca3af; font-size: 13px; padding-bottom: 4px; }
-            QLabel#fieldLabel { color: #d1d5db; font-size: 12px; font-weight: 600; }
-            QLineEdit#fieldInput {
-                min-height: 38px; border: 1px solid #374151; border-radius: 8px; padding: 0 10px;
-                background-color: #0b1220; color: #f9fafb;
-            }
-            QLineEdit#fieldInput:focus { border: 1px solid #60a5fa; }
-            QPushButton#primaryBtn {
-                min-height: 38px; border-radius: 8px; border: none; font-weight: 700; color: white;
-                background-color: #2563eb;
-            }
-            QPushButton#primaryBtn:hover { background-color: #1d4ed8; }
-            QPushButton#secondaryBtn {
-                min-height: 38px; border-radius: 8px; font-weight: 600; color: #dbeafe;
-                border: 1px solid #3b82f6; background-color: transparent;
-            }
-            QPushButton#secondaryBtn:hover { background-color: #1e3a8a; }
-            """
+        sub = QLabel(
+            "Zebrafish Integrated Motion & Optical Neuroanalysis Chamber"
         )
+        sub.setObjectName("loginWelcomeSub")
+        sub.setWordWrap(True)
+        rv.addWidget(sub)
+
+        rv.addSpacing(5)
+
+        em_label = QLabel("Email or Username")
+        em_label.setObjectName("loginFieldCaption")
+        rv.addWidget(em_label)
+        self._user_shell, self.username_or_email_input = styled_input_row(
+            "👤", "Enter your email or username"
+        )
+        rv.addWidget(self._user_shell)
+
+        pw_label = QLabel("Password")
+        pw_label.setObjectName("loginFieldCaption")
+        rv.addWidget(pw_label)
+        self._password_row_widget = self._password_row()
+        rv.addWidget(self._password_row_widget)
+
+        row = QHBoxLayout()
+        row.setSpacing(9)
+        self.remember_checkbox = QCheckBox("Remember me")
+        self.remember_checkbox.setObjectName("loginRemember")
+        row.addWidget(self.remember_checkbox)
+        row.addStretch(1)
+        self.forgot_password_btn = QPushButton("Forgot Password?")
+        self.forgot_password_btn.setObjectName("loginForgotLink")
+        self.forgot_password_btn.setFlat(True)
+        self.forgot_password_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.addWidget(self.forgot_password_btn)
+        rv.addLayout(row)
+
+        self.login_btn = QPushButton("Login   →")
+        self.login_btn.setObjectName("loginPrimaryBtn")
+        self.login_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.login_btn.setMinimumHeight(42)
+        self.login_btn.setMaximumHeight(44)
+        rv.addWidget(self.login_btn)
+        rv.addStretch(1)
+
+        outer_rv.addWidget(form_block, 1)
+        outer_rv.addWidget(login_hardware_status_strip(), 0)
+
+        shell.addWidget(right, 1)
+
+        self.setStyleSheet(AUTH_SHELL_QSS)
 
         self.login_btn.clicked.connect(self._on_login)
         self.forgot_password_btn.clicked.connect(self._open_forgot_password)
-        self.create_account_btn.clicked.connect(self._open_register)
+
+    def _password_row(self) -> QFrame:
+        wrap = QFrame()
+        wrap.setObjectName("loginInputShell")
+        hl = QHBoxLayout(wrap)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        g = QLabel("🔒")
+        g.setObjectName("loginInputGlyph")
+        hl.addWidget(g)
+        self.password_input = QLineEdit()
+        self.password_input.setObjectName("loginLineInner")
+        self.password_input.setPlaceholderText("Enter your password")
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        hl.addWidget(self.password_input, 1)
+        self._pw_toggle = QPushButton("👁")
+        self._pw_toggle.setObjectName("loginPwToggle")
+        self._pw_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._pw_toggle.setFixedWidth(44)
+        self._pw_toggle.clicked.connect(self._toggle_password_visibility)
+        hl.addWidget(self._pw_toggle)
+        return wrap
+
+    def _toggle_password_visibility(self):
+        self._pw_visible = not self._pw_visible
+        self.password_input.setEchoMode(
+            QLineEdit.EchoMode.Normal
+            if self._pw_visible
+            else QLineEdit.EchoMode.Password
+        )
 
     def _on_login(self):
         username_or_email = self.username_or_email_input.text().strip()
         password = self.password_input.text()
         if not username_or_email or not password:
-            QMessageBox.warning(self, "Missing Fields", "Please enter username/email and password.")
+            QMessageBox.warning(
+                self,
+                "Missing fields",
+                "Please enter your email or username and password.",
+            )
             return
 
-        ok, payload = login_user(username_or_email, password)
+        ok, payload = verify_login_credentials(username_or_email, password)
         if ok:
-            QMessageBox.information(self, "Login Successful", f"Welcome, {payload['full_name']}")
+            set_active_session(int(payload["id"]))
+            if self.remember_checkbox.isChecked():
+                self._settings.setValue("remember_username", True)
+                self._settings.setValue("saved_username", username_or_email)
+            else:
+                self._settings.setValue("remember_username", False)
+                self._settings.remove("saved_username")
+
+            QMessageBox.information(
+                self, "Welcome", f"Signed in as {payload['full_name']}."
+            )
             self.login_success.emit(payload)
             self.close()
         else:
-            QMessageBox.warning(self, "Login Failed", str(payload))
-
-    def _open_register(self):
-        if self.register_window is None:
-            self.register_window = RegisterWindow()
-            self.register_window.back_to_login.connect(self._back_from_register)
-        self.register_window.showNormal()
-        self.register_window.raise_()
-        self.register_window.activateWindow()
-        self.hide()
+            QMessageBox.warning(self, "Sign in failed", str(payload))
 
     def _open_forgot_password(self):
         if self.forgot_password_window is None:
@@ -174,115 +619,96 @@ class LoginWindow(QWidget):
         self.activateWindow()
         self.show()
 
-    def _back_from_register(self):
-        if self.register_window is not None:
-            self.register_window.hide()
-        self.showNormal()
-        self.raise_()
-        self.activateWindow()
-        self.show()
-
 
 class ForgotPasswordWindow(QWidget):
     back_to_login = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ZIMON - Reset Password")
-        self.setFixedSize(760, 460)
+        self.setWindowTitle("ZIMON — Reset password")
+        self.setFixedSize(WINDOW_W, WINDOW_H)
         self._build_ui()
 
     def _build_ui(self):
-        self.setObjectName("forgotRoot")
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(24, 24, 24, 24)
-        root_layout.setSpacing(0)
+        self.setObjectName("loginRootOuter")
 
-        card_row = QHBoxLayout()
-        root_layout.addLayout(card_row)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(MARGIN_X, MARGIN_Y, MARGIN_X, MARGIN_Y)
+        outer.setSpacing(0)
 
         card = QFrame()
-        card.setObjectName("authCard")
-        card.setMinimumWidth(620)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        card_row.addStretch()
-        card_row.addWidget(card, 1)
-        card_row.addStretch()
+        card.setObjectName("loginShellCard")
+        card.setFixedSize(CARD_W, CARD_H)
+        card_row = QHBoxLayout()
+        card_row.addStretch(1)
+        card_row.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
+        card_row.addStretch(1)
+        outer.addLayout(card_row)
 
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(14)
+        shell = QHBoxLayout(card)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
 
-        brand_row = QHBoxLayout()
-        brand_badge = QLabel("🧬")
-        brand_badge.setObjectName("brandBadge")
-        brand_name = QLabel("ZIMON")
-        brand_name.setObjectName("brandTitle")
-        brand_row.addWidget(brand_badge)
-        brand_row.addWidget(brand_name)
-        brand_row.addStretch(1)
-        layout.addLayout(brand_row)
+        shell.addWidget(brand_hero_left_panel())
 
-        description = QLabel("Enter the email to receive the password reset link")
-        description.setObjectName("brandTagline")
-        layout.addWidget(description)
+        right = QFrame()
+        right.setObjectName("loginFormPanel")
+        right.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        outer_rv = QVBoxLayout(right)
+        outer_rv.setContentsMargins(0, 0, 0, 0)
+        outer_rv.setSpacing(0)
+        outer_rv.addStretch(1)
 
-        title = QLabel("Password Reset")
-        title.setObjectName("titleLabel")
-        layout.addWidget(title)
+        form_block = QWidget()
+        form_block.setObjectName("loginFormBlock")
+        form_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rv = QVBoxLayout(form_block)
+        rv.setContentsMargins(45, 45, 41, 33)
+        rv.setSpacing(19)
 
-        email_label = QLabel("Email")
-        email_label.setObjectName("fieldLabel")
-        layout.addWidget(email_label)
+        title = QLabel("Reset your password")
+        title.setObjectName("loginWelcomeTitle")
+        rv.addWidget(title)
 
-        self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("Enter your email")
-        self.email_input.setObjectName("fieldInput")
-        layout.addWidget(self.email_input)
-
-        layout.addSpacing(18)
-        layout.addStretch(3)
-
-        row = QHBoxLayout()
-        self.send_btn = QPushButton("Send Reset Link")
-        self.send_btn.setObjectName("primaryBtn")
-        self.back_btn = QPushButton("Back to Login")
-        self.back_btn.setObjectName("secondaryBtn")
-        row.addWidget(self.send_btn)
-        row.addWidget(self.back_btn)
-        layout.addLayout(row)
-
-        self.setStyleSheet(
-            """
-            QWidget#forgotRoot { background-color: #0f172a; }
-            QFrame#authCard { background-color: #111827; border: 1px solid #1f2937; border-radius: 14px; }
-            QLabel#titleLabel { color: #f9fafb; font-size: 24px; font-weight: 700; padding-bottom: 2px; }
-            QLabel#brandBadge {
-                min-width: 34px; max-width: 34px; min-height: 34px; max-height: 34px;
-                border-radius: 17px; color: white; font-size: 18px; font-weight: 800;
-                background-color: #2563eb; qproperty-alignment: AlignCenter;
-            }
-            QLabel#brandTitle { color: #93c5fd; font-size: 28px; font-weight: 900; letter-spacing: 1px; padding-left: 10px; }
-            QLabel#brandTagline { color: #cbd5e1; font-size: 13px; padding-bottom: 14px; }
-            QLabel#subtitleLabel { color: #9ca3af; font-size: 13px; padding-bottom: 4px; }
-            QLabel#fieldLabel { color: #d1d5db; font-size: 12px; font-weight: 600; }
-            QLineEdit#fieldInput {
-                min-height: 38px; border: 1px solid #374151; border-radius: 8px; padding: 0 10px;
-                background-color: #0b1220; color: #f9fafb;
-            }
-            QLineEdit#fieldInput:focus { border: 1px solid #60a5fa; }
-            QPushButton#primaryBtn {
-                min-height: 38px; border-radius: 8px; border: none; font-weight: 700; color: white;
-                background-color: #2563eb;
-            }
-            QPushButton#primaryBtn:hover { background-color: #1d4ed8; }
-            QPushButton#secondaryBtn {
-                min-height: 38px; border-radius: 8px; font-weight: 600; color: #dbeafe;
-                border: 1px solid #3b82f6; background-color: transparent;
-            }
-            QPushButton#secondaryBtn:hover { background-color: #1e3a8a; }
-            """
+        sub = QLabel(
+            "Enter the email associated with your account. If it is registered, "
+            "you will receive password reset instructions."
         )
+        sub.setObjectName("loginWelcomeSub")
+        sub.setWordWrap(True)
+        rv.addWidget(sub)
+
+        rv.addSpacing(5)
+
+        em_label = QLabel("Email")
+        em_label.setObjectName("loginFieldCaption")
+        rv.addWidget(em_label)
+        self._email_shell, self.email_input = styled_input_row(
+            "✉", "Enter your email address"
+        )
+        rv.addWidget(self._email_shell)
+
+        rv.addStretch(1)
+
+        self.send_btn = QPushButton("Send reset link   →")
+        self.send_btn.setObjectName("loginPrimaryBtn")
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setMinimumHeight(42)
+        self.send_btn.setMaximumHeight(44)
+        rv.addWidget(self.send_btn)
+
+        self.back_btn = QPushButton("← Back to sign in")
+        self.back_btn.setObjectName("loginForgotLink")
+        self.back_btn.setFlat(True)
+        self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        rv.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignCenter)
+
+        outer_rv.addWidget(form_block)
+        outer_rv.addStretch(1)
+
+        shell.addWidget(right, 1)
+
+        self.setStyleSheet(AUTH_SHELL_QSS)
 
         self.send_btn.clicked.connect(self._send_reset_link)
         self.back_btn.clicked.connect(self.back_to_login.emit)
@@ -290,13 +716,12 @@ class ForgotPasswordWindow(QWidget):
     def _send_reset_link(self):
         email = self.email_input.text().strip()
         if not email:
-            QMessageBox.warning(self, "Missing Email", "Please enter your email address.")
+            QMessageBox.warning(self, "Missing email", "Please enter your email address.")
             return
 
         QMessageBox.information(
             self,
-            "Reset Link Sent",
-            "If this email is registered, a password reset link will be sent."
+            "Reset link sent",
+            "If this email is registered, a password reset link will be sent.",
         )
         self.back_to_login.emit()
-

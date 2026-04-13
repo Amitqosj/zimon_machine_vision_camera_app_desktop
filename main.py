@@ -36,6 +36,8 @@ def main():
     app = QApplication(sys.argv)
     APP_INSTANCE = app
 
+
+
     # =========================
     # LOAD GLOBAL STYLESHEET (dark / light from QSettings)
     # =========================

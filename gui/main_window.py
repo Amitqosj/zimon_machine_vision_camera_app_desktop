@@ -3,10 +3,10 @@ from PyQt6.QtWidgets import (
     QLabel, QTabWidget, QGroupBox, QPushButton,
     QCheckBox, QSlider, QSpinBox, QColorDialog, QComboBox, QMessageBox,
     QStackedWidget, QFrame, QScrollArea, QListWidget, QListWidgetItem,
-    QGridLayout,
+    QGridLayout, QMenu, QButtonGroup, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject, QDateTime
-from PyQt6.QtGui import QIcon, QImage, QPixmap
+from PyQt6.QtGui import QAction, QIcon, QImage, QPixmap
 import logging
 import time
 import cv2
@@ -15,6 +15,21 @@ from gui.settings_dialog import SettingsDialog
 from gui.analysis_tab import AnalysisTab
 from gui.presets_tab import PresetsTab
 from backend.camera_interface import CameraType
+
+# Top navbar body stack indices (single recording page for Adult + Larval)
+PAGE_RECORDING = 0
+PAGE_ENVIRONMENT = 1
+PAGE_PROTOCOL = 2
+PAGE_EXPERIMENTS = 3
+PAGE_ACCOUNT = 4
+
+# Display names (match main nav / shared UI reference)
+SCREEN_ADULT = "Adult"
+SCREEN_LARVAL = "Larval"
+SCREEN_ENVIRONMENT = "Environment"
+SCREEN_PROTOCOL_BUILDER = "Protocol Builder"
+SCREEN_EXPERIMENTS = "Experiments"
+SCREEN_ACCOUNT = "Account"
 
 
 class MainWindow(QMainWindow):
@@ -25,7 +40,7 @@ class MainWindow(QMainWindow):
         self.camera = camera
         self.user_data = user_data or {}
         self.logger = logging.getLogger("main_window")
-        
+
         # Initialize ZebraZoom integration
         try:
             from backend.zebrazoom_integration import ZebraZoomIntegration
@@ -93,7 +108,7 @@ class MainWindow(QMainWindow):
         self.fps_counter_label = None  # FPS overlay label
         self.current_fps = 0.0
 
-        self.setWindowTitle("ZIMON — Behaviour Tracking System")
+        self._nav_screen_name = SCREEN_ADULT
         self.resize(1400, 900)
         self._build_ui()
         # Start maximized for best experience
@@ -184,46 +199,40 @@ class MainWindow(QMainWindow):
     # ---------- UI ROOT ----------
     def _build_ui(self):
         central = QWidget()
-        root = QHBoxLayout(central)
+        root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_sidebar())
-
-        mid_wrap = QWidget()
-        mid_outer = QVBoxLayout(mid_wrap)
-        mid_outer.setContentsMargins(0, 0, 0, 0)
-        mid_outer.setSpacing(0)
-
-        mid_cols = QHBoxLayout()
-        mid_cols.setContentsMargins(8, 0, 8, 0)
-        mid_cols.setSpacing(10)
-        mid_cols.addWidget(self._build_left_assay_panel(), 0)
-
-        main_area = QWidget()
-        main_layout = QVBoxLayout(main_area)
-        main_layout.setContentsMargins(8, 12, 8, 0)
-        main_layout.setSpacing(10)
-        main_layout.addLayout(self._build_header())
-
-        self.pages = QStackedWidget()
-        self.pages.addWidget(self._environment_tab())
-        self.pages.addWidget(self._experiment_tab())
         uid = self.user_data.get("id")
         self.presets_tab = PresetsTab(self, user_id=uid if uid is not None else None)
-        self.pages.addWidget(self.presets_tab)
         self.analysis_tab = AnalysisTab(self.zebrazoom)
-        self.pages.addWidget(self.analysis_tab)
+
+        self._workspace_scroll = QScrollArea()
+        self._workspace_scroll.setWidgetResizable(True)
+        self._workspace_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._workspace_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._workspace_scroll.setWidget(self._build_workspace_center_page())
+
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._build_recording_workspace_page())
+        self.pages.addWidget(self._build_environment_page())
+        self.pages.addWidget(self._build_protocol_builder_page())
+        self.pages.addWidget(self._build_experiments_page())
         self.pages.addWidget(self._build_account_tab())
 
-        main_layout.addWidget(self.pages, 1)
-        mid_cols.addWidget(main_area, 1)
-        mid_cols.addWidget(self._build_right_dashboard_panel(), 0)
-        mid_outer.addLayout(mid_cols, 1)
-        mid_outer.addWidget(self._build_dashboard_status_bar())
-        root.addWidget(mid_wrap, 1)
+        root.addWidget(self._build_top_nav_bar(), 0)
+        root.addWidget(self.pages, 1)
 
         self.setCentralWidget(central)
+        self._recording_mode = "adult"
+        self._sync_recording_nav_title()
+        self._sync_window_title()
+        QTimer.singleShot(
+            0,
+            lambda: (self._refresh_workspace_alert_banner(), self._sync_system_ready_badge()),
+        )
 
     def _build_left_assay_panel(self):
         frame = QFrame()
@@ -319,275 +328,376 @@ class MainWindow(QMainWindow):
             except Exception:
                 self._footer_chamber_label.setText("Chamber: —")
 
-    # ---------- SIDEBAR ----------
-    # Wider rail: icon + label per row (readable “proper” navbar)
-    _SIDEBAR_WIDTH = 168
-    _SIDEBAR_NAV_BTN = 48
+    # ---------- TOP NAV (web-style) ----------
+    def _build_top_nav_bar(self) -> QWidget:
+        bar = QFrame()
+        bar.setObjectName("ZimonTopNav")
+        bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        bar.setFixedHeight(78)
+        hl = QHBoxLayout(bar)
+        hl.setContentsMargins(16, 8, 16, 8)
+        hl.setSpacing(14)
 
-    def _build_sidebar(self):
-        sidebar = QFrame()
-        sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(self._SIDEBAR_WIDTH)
-        sidebar.setMinimumWidth(self._SIDEBAR_WIDTH)
-        sidebar.setMaximumWidth(self._SIDEBAR_WIDTH)
-        sidebar.setStyleSheet("""
-            QFrame#Sidebar {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #1a1d23, stop:1 #0d0f13);
-                border-right: 2px solid #2a2d36;
-            }
-        """)
-        
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(14, 20, 14, 20)
-        layout.setSpacing(10)
-        
-        # Logo section at top
-        logo_container = QFrame()
-        logo_container.setStyleSheet("""
-            QFrame {
-                background: transparent;
-                border: none;
-            }
-        """)
-        logo_layout = QVBoxLayout(logo_container)
-        logo_layout.setContentsMargins(0, 0, 0, 0)
-        logo_layout.setSpacing(8)
-        
-        # Modern logo with better icon
-        logo = QLabel("🧬")
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setStyleSheet("""
-            QLabel {
-                font-size: 36px;
-                padding: 12px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
-                    stop:0 #6366f1, stop:1 #8b5cf6);
-                border-radius: 20px;
-                color: white;
-                font-weight: bold;
-            }
-        """)
-        logo_layout.addWidget(logo)
-        
-        # App name with better styling
-        app_name = QLabel("ZIMON")
-        app_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        app_name.setStyleSheet("""
-            QLabel {
-                color: #ffffff;
-                font-size: 15px;
-                font-weight: 700;
-                padding: 10px 8px;
-                background: rgba(99, 102, 241, 0.15);
-                border-radius: 8px;
-                border: 1px solid rgba(99, 102, 241, 0.3);
-                letter-spacing: 3px;
-            }
-        """)
-        logo_layout.addWidget(app_name)
-        
-        layout.addWidget(logo_container)
-        
-        # Separator with better styling
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet("""
-            QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 transparent, stop:0.5 #2a2d36, stop:1 transparent);
-                max-height: 2px;
-                border: none;
-            }
-        """)
-        layout.addWidget(sep)
-        
-        layout.addSpacing(12)
-        
-        nav_btn_style = """
-                QPushButton {
-                    background: rgba(255, 255, 255, 0.05);
-                    border: 2px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 12px;
-                    font-size: 22px;
-                    color: #b8bcc8;
-                    font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background: rgba(99, 102, 241, 0.15);
-                    border: 2px solid rgba(99, 102, 241, 0.4);
-                    color: #ffffff;
-                }
-                QPushButton:checked {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                        stop:0 #6366f1, stop:1 #8b5cf6);
-                    border: 2px solid #6366f1;
-                    color: #ffffff;
-                    font-weight: bold;
-                }
-                QPushButton:pressed {
-                    background: rgba(79, 70, 229, 0.8);
-                    border: 2px solid #4f46e5;
-                }
-            """
-        nav_label_style = """
-                QLabel {
-                    color: #c4c8d0;
-                    font-size: 12px;
-                    font-weight: 600;
-                    padding: 0px;
-                }
-            """
+        brand_icon = QLabel("🧬")
+        brand_icon.setObjectName("ZimonNavLogo")
+        brand_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand_col = QVBoxLayout()
+        brand_col.setSpacing(2)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+        zimon = QLabel("ZIMON")
+        zimon.setObjectName("ZimonNavTitle")
+        title_row.addWidget(zimon)
+        check_env = QPushButton("Check environment")
+        check_env.setObjectName("ZimonCheckEnvBtn")
+        check_env.setToolTip("Open Environment — devices, cameras, and readiness")
+        check_env.setCursor(Qt.CursorShape.PointingHandCursor)
+        check_env.clicked.connect(self._nav_go_environment)
+        title_row.addWidget(check_env, 0, Qt.AlignmentFlag.AlignVCenter)
+        title_row.addStretch(1)
+        brand_col.addLayout(title_row)
+        sub = QLabel("Zebrafish Integrated Motion & Optical N…")
+        sub.setObjectName("ZimonNavSubtitle")
+        brand_col.addWidget(sub)
 
-        self.nav_buttons = []
-        nav_items = [
-            ("🏠", "Home", "Environment", 0),
-            ("🧪", "Lab", "Experiment", 1),
-            ("💾", "Presets", "Presets", 2),
-            ("📊", "Data", "Analysis", 3),
-        ]
-        
-        for icon, short_name, tooltip, page_idx in nav_items:
-            row = QFrame()
-            row.setStyleSheet("QFrame { background: transparent; border: none; }")
-            row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(0, 2, 0, 2)
-            row_layout.setSpacing(10)
-            
-            btn = QPushButton(icon)
-            btn.setToolTip(tooltip)
-            btn.setFixedSize(self._SIDEBAR_NAV_BTN, self._SIDEBAR_NAV_BTN)
-            btn.setCheckable(True)
-            btn.setStyleSheet(nav_btn_style)
-            btn.clicked.connect(lambda checked, idx=page_idx: self._switch_page(idx))
-            row_layout.addWidget(btn, 0, Qt.AlignmentFlag.AlignVCenter)
-            
-            label = QLabel(short_name)
-            label.setToolTip(tooltip)
-            label.setStyleSheet(nav_label_style)
-            label.setAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-            )
-            row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
-            
-            layout.addWidget(row)
-            self.nav_buttons.append(btn)
-        
-        # Select first button by default
-        if self.nav_buttons:
-            self.nav_buttons[0].setChecked(True)
-        
-        layout.addStretch()
-        
-        # Bottom section with settings
-        bottom_container = QFrame()
-        bottom_container.setStyleSheet("QFrame { background: transparent; border: none; }")
-        bottom_layout = QVBoxLayout(bottom_container)
-        bottom_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_layout.setSpacing(8)
-        
-        secondary_btn_style = """
-            QPushButton {
-                background: rgba(148, 163, 184, 0.1);
-                border: 2px solid rgba(148, 163, 184, 0.2);
-                border-radius: 12px;
-                font-size: 20px;
-                color: #94a3b8;
-                font-family: "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: rgba(99, 102, 241, 0.15);
-                border: 2px solid rgba(99, 102, 241, 0.4);
-                color: #ffffff;
-            }
-            QPushButton:pressed {
-                background: rgba(79, 70, 229, 0.3);
-                border: 2px solid #4f46e5;
-            }
-        """
-        account_btn_style = secondary_btn_style + """
-            QPushButton:checked {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #6366f1, stop:1 #8b5cf6);
-                border: 2px solid #6366f1;
-                color: #ffffff;
-            }
-        """
-        bottom_label_style = nav_label_style
+        brand_wrap = QHBoxLayout()
+        brand_wrap.setSpacing(10)
+        brand_wrap.addWidget(brand_icon, 0, Qt.AlignmentFlag.AlignTop)
+        brand_wrap.addLayout(brand_col, 1)
+        hl.addLayout(brand_wrap, 0)
 
-        # Settings — same row layout as main nav
-        settings_row = QFrame()
-        settings_row.setStyleSheet("QFrame { background: transparent; border: none; }")
-        sr = QHBoxLayout(settings_row)
-        sr.setContentsMargins(0, 2, 0, 2)
-        sr.setSpacing(10)
-        settings_btn = QPushButton("⚙️")
-        settings_btn.setToolTip("Settings")
-        settings_btn.setFixedSize(self._SIDEBAR_NAV_BTN, self._SIDEBAR_NAV_BTN)
-        settings_btn.setStyleSheet(secondary_btn_style)
-        settings_btn.clicked.connect(self._show_settings)
-        sr.addWidget(settings_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-        settings_label = QLabel("Settings")
-        settings_label.setToolTip("Settings")
-        settings_label.setStyleSheet(bottom_label_style)
-        settings_label.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        hl.addStretch(1)
+
+        pill_wrap = QWidget()
+        pill_lay = QHBoxLayout(pill_wrap)
+        pill_lay.setContentsMargins(0, 0, 0, 0)
+        pill_lay.setSpacing(6)
+
+        def pill(text: str) -> QPushButton:
+            b = QPushButton(text)
+            b.setObjectName("ZimonNavPill")
+            b.setCheckable(True)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            pill_lay.addWidget(b)
+            return b
+
+        self._nav_pill_adult = pill("Adult")
+        self._nav_pill_larval = pill("Larval")
+        self._nav_pill_environment = pill("Environment")
+        self._nav_pill_protocol = pill("Protocol Builder")
+        self._nav_pill_experiments = pill("Experiments")
+
+        self._nav_route_group = QButtonGroup(self)
+        for b in (
+            self._nav_pill_adult,
+            self._nav_pill_larval,
+            self._nav_pill_environment,
+            self._nav_pill_protocol,
+            self._nav_pill_experiments,
+        ):
+            self._nav_route_group.addButton(b)
+        self._nav_route_group.setExclusive(True)
+
+        self._nav_pill_adult.clicked.connect(
+            lambda: self._nav_go_recording("adult") if self._nav_pill_adult.isChecked() else None
         )
-        sr.addWidget(settings_label, 1, Qt.AlignmentFlag.AlignVCenter)
-        bottom_layout.addWidget(settings_row)
-        
-        # Account (page index 4) — below Settings
-        account_row = QFrame()
-        account_row.setStyleSheet("QFrame { background: transparent; border: none; }")
-        ar = QHBoxLayout(account_row)
-        ar.setContentsMargins(0, 2, 0, 2)
-        ar.setSpacing(10)
-        account_btn = QPushButton("👤")
-        account_btn.setToolTip("Account")
-        account_btn.setFixedSize(self._SIDEBAR_NAV_BTN, self._SIDEBAR_NAV_BTN)
-        account_btn.setCheckable(True)
-        account_btn.setStyleSheet(account_btn_style)
-        account_btn.clicked.connect(self._switch_to_account_page)
-        ar.addWidget(account_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-        self.account_sidebar_btn = account_btn
-        account_label = QLabel("Account")
-        account_label.setToolTip("Account")
-        account_label.setStyleSheet(bottom_label_style)
-        account_label.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        self._nav_pill_larval.clicked.connect(
+            lambda: self._nav_go_recording("larval") if self._nav_pill_larval.isChecked() else None
         )
-        ar.addWidget(account_label, 1, Qt.AlignmentFlag.AlignVCenter)
-        bottom_layout.addWidget(account_row)
-        
-        layout.addWidget(bottom_container)
-        
-        return sidebar
-    
-    def _switch_page(self, index):
-        """Switch to a page and update nav button states"""
-        self.pages.setCurrentIndex(index)
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == index)
-        if getattr(self, "account_sidebar_btn", None):
-            self.account_sidebar_btn.setChecked(False)
-        
-        # Update page title
-        titles = ["Environment", "Experiment", "Presets", "Analysis"]
-        if hasattr(self, 'page_title') and index < len(titles):
-            self.page_title.setText(titles[index])
-    
+        self._nav_pill_environment.clicked.connect(
+            lambda: self._nav_go_environment() if self._nav_pill_environment.isChecked() else None
+        )
+        self._nav_pill_protocol.clicked.connect(
+            lambda: self._nav_go_protocol() if self._nav_pill_protocol.isChecked() else None
+        )
+        self._nav_pill_experiments.clicked.connect(
+            lambda: self._nav_go_experiments() if self._nav_pill_experiments.isChecked() else None
+        )
+
+        hl.addWidget(pill_wrap, 0)
+
+        hl.addStretch(1)
+
+        self.arduino_status_label = QLabel("Arduino: …")
+        self.arduino_status_label.setObjectName("ZimonNavArduinoChip")
+        hl.addWidget(self.arduino_status_label, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        def icon_btn(sym: str, tip: str, slot) -> QPushButton:
+            b = QPushButton(sym)
+            b.setObjectName("ZimonNavIconBtn")
+            b.setFixedSize(40, 40)
+            b.setToolTip(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(slot)
+            hl.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+            return b
+
+        icon_btn("🔔", "Notifications", self._nav_notifications_stub)
+        icon_btn("☀", "Toggle light / dark theme", self._on_toggle_theme)
+        icon_btn("⚙", "Settings", self._show_settings)
+
+        full_name = (self.user_data or {}).get("full_name", "User").strip() or "User"
+        self._nav_profile_btn = QPushButton(f"  {full_name}  ▾  ")
+        self._nav_profile_btn.setObjectName("ZimonNavProfileBtn")
+        self._nav_profile_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        menu = QMenu(self)
+        act_account = QAction("Account…", self)
+        act_account.triggered.connect(self._switch_to_account_page)
+        menu.addAction(act_account)
+        self._nav_profile_btn.setMenu(menu)
+        hl.addWidget(self._nav_profile_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self._nav_pill_adult.setChecked(True)
+        return bar
+
+    def _nav_notifications_stub(self):
+        QMessageBox.information(
+            self, "Notifications", "No new notifications."
+        )
+
+    def _uncheck_nav_pills(self):
+        self._nav_route_group.setExclusive(False)
+        for b in self._nav_route_group.buttons():
+            b.setChecked(False)
+        self._nav_route_group.setExclusive(True)
+
+    def _sync_window_title(self):
+        """Taskbar / window title: ZIMON — <Screen name> | Welcome, …"""
+        fn = (self.user_data or {}).get("full_name", "User")
+        fn = str(fn).strip() or "User"
+        role = (self.user_data or {}).get("role", "user")
+        sec = getattr(self, "_nav_screen_name", SCREEN_ADULT)
+        self.setWindowTitle(f"ZIMON — {sec} | Welcome, {fn} ({role})")
+
+    def _set_nav_screen(self, screen_name: str):
+        self._nav_screen_name = screen_name
+        self._sync_window_title()
+
+    def _nav_go_recording(self, mode: str):
+        self._recording_mode = mode
+        self.pages.setCurrentIndex(PAGE_RECORDING)
+        self._uncheck_nav_pills()
+        if mode == "adult":
+            self._nav_pill_adult.setChecked(True)
+            self._set_nav_screen(SCREEN_ADULT)
+        else:
+            self._nav_pill_larval.setChecked(True)
+            self._set_nav_screen(SCREEN_LARVAL)
+        self._sync_recording_nav_title()
+        self._refresh_workspace_alert_banner()
+
+    def _nav_go_environment(self):
+        self.pages.setCurrentIndex(PAGE_ENVIRONMENT)
+        self._uncheck_nav_pills()
+        self._nav_pill_environment.setChecked(True)
+        self._set_nav_screen(SCREEN_ENVIRONMENT)
+        self._refresh_workspace_alert_banner()
+
+    def _nav_go_protocol(self):
+        self.pages.setCurrentIndex(PAGE_PROTOCOL)
+        self._uncheck_nav_pills()
+        self._nav_pill_protocol.setChecked(True)
+        self._set_nav_screen(SCREEN_PROTOCOL_BUILDER)
+
+    def _nav_go_experiments(self):
+        self.pages.setCurrentIndex(PAGE_EXPERIMENTS)
+        self._uncheck_nav_pills()
+        self._nav_pill_experiments.setChecked(True)
+        self._set_nav_screen(SCREEN_EXPERIMENTS)
+
     def _switch_to_account_page(self):
-        """Open Account page (stack index 4); exclusive with main nav."""
-        self.pages.setCurrentIndex(4)
-        for btn in self.nav_buttons:
-            btn.setChecked(False)
-        if getattr(self, "account_sidebar_btn", None):
-            self.account_sidebar_btn.setChecked(True)
-        if hasattr(self, "page_title"):
-            self.page_title.setText("Account")
-    
+        self.pages.setCurrentIndex(PAGE_ACCOUNT)
+        self._uncheck_nav_pills()
+        self._set_nav_screen(SCREEN_ACCOUNT)
+
+    def _sync_recording_nav_title(self):
+        m = getattr(self, "_recording_mode", "adult")
+        name = SCREEN_ADULT if m == "adult" else SCREEN_LARVAL
+        if getattr(self, "_recording_screen_title", None):
+            self._recording_screen_title.setText(name)
+        if getattr(self, "_recording_screen_subtitle", None):
+            self._recording_screen_subtitle.setText(
+                "Multi-well recording, live preview, protocol load, and run controls."
+                if m == "adult"
+                else "Larval module — assays, cameras, stimuli, and experiment controls."
+            )
+
+    def _refresh_workspace_alert_banner(self):
+        if not getattr(self, "_workspace_alert_banner", None):
+            return
+        parts = []
+        if not self.arduino or not self.arduino.is_connected():
+            parts.append(
+                "Arduino not connected — use Settings to connect the serial port. "
+                "Lighting and auxiliary controls need the link."
+            )
+        cams = []
+        if self.camera:
+            try:
+                cams = self.camera.list_cameras() or []
+            except Exception:
+                cams = []
+        if not cams:
+            parts.append(
+                "No cameras detected — check USB connections and refresh the camera list."
+            )
+        if parts:
+            self._workspace_alert_banner.setText(" ".join(parts))
+            self._workspace_alert_banner.show()
+        else:
+            self._workspace_alert_banner.setText("System ready — hardware linked.")
+            self._workspace_alert_banner.show()
+
+    def _build_recording_workspace_page(self) -> QWidget:
+        w = QWidget()
+        outer = QVBoxLayout(w)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        mid = QHBoxLayout()
+        mid.setContentsMargins(8, 0, 8, 0)
+        mid.setSpacing(10)
+        mid.addWidget(self._build_left_assay_panel(), 0)
+
+        center = QWidget()
+        cv = QVBoxLayout(center)
+        cv.setContentsMargins(8, 10, 8, 0)
+        cv.setSpacing(8)
+
+        self._recording_screen_title = QLabel(SCREEN_ADULT)
+        self._recording_screen_title.setObjectName("ZimonScreenTitle")
+        cv.addWidget(self._recording_screen_title)
+        self._recording_screen_subtitle = QLabel(
+            "Multi-well recording, live preview, protocol load, and run controls."
+        )
+        self._recording_screen_subtitle.setObjectName("ZimonScreenSubtitle")
+        self._recording_screen_subtitle.setWordWrap(True)
+        cv.addWidget(self._recording_screen_subtitle)
+
+        status_row = QHBoxLayout()
+        idle = QLabel("● IDLE")
+        idle.setStyleSheet("color: #94a3b8; font-weight: 600; font-size: 12px;")
+        self._run_protocol_lbl = QLabel("Protocol —")
+        self._run_protocol_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        self._run_id_lbl = QLabel("Run ID —")
+        self._run_id_lbl.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        status_row.addWidget(idle)
+        status_row.addSpacing(16)
+        status_row.addWidget(self._run_protocol_lbl)
+        status_row.addSpacing(16)
+        status_row.addWidget(self._run_id_lbl)
+        status_row.addStretch(1)
+        self._run_ready_badge = QLabel("SYSTEM NOT READY")
+        self._run_ready_badge.setObjectName("SystemNotReadyBadge")
+        status_row.addWidget(self._run_ready_badge)
+        cv.addLayout(status_row)
+
+        self._workspace_alert_banner = QLabel()
+        self._workspace_alert_banner.setObjectName("WorkspaceAlertBanner")
+        self._workspace_alert_banner.setWordWrap(True)
+        cv.addWidget(self._workspace_alert_banner)
+
+        cv.addWidget(self._workspace_scroll, 1)
+        mid.addWidget(center, 1)
+        mid.addWidget(self._build_right_dashboard_panel(), 0)
+        outer.addLayout(mid, 1)
+        outer.addWidget(self._build_dashboard_status_bar())
+        return w
+
+    def _build_environment_page(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        header = QFrame()
+        header.setObjectName("EnvironmentPageHeader")
+        hh = QHBoxLayout(header)
+        hh.setContentsMargins(20, 14, 20, 12)
+        ht = QVBoxLayout()
+        t0 = QLabel(SCREEN_ENVIRONMENT)
+        t0.setObjectName("ZimonScreenTitle")
+        t1 = QLabel("System readiness")
+        t1.setStyleSheet("font-size: 20px; font-weight: 700; color: #f8fafc;")
+        t2 = QLabel(
+            "Live status from devices and API — connect Arduino and cameras in Settings; "
+            "use Test actions when hardware is linked."
+        )
+        t2.setStyleSheet("color: #94a3b8; font-size: 13px;")
+        t2.setWordWrap(True)
+        ht.addWidget(t0)
+        ht.addWidget(t1)
+        ht.addWidget(t2)
+        hh.addLayout(ht, 1)
+        badge = QLabel("ACTION REQUIRED")
+        badge.setObjectName("ActionRequiredBadge")
+        hh.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+        lay.addWidget(header)
+        lay.addWidget(self._environment_tab(), 1)
+        return page
+
+    def _build_protocol_builder_page(self) -> QWidget:
+        w = QWidget()
+        l = QVBoxLayout(w)
+        l.setContentsMargins(16, 14, 16, 12)
+        l.setSpacing(12)
+        hrow = QHBoxLayout()
+        title = QLabel(SCREEN_PROTOCOL_BUILDER)
+        title.setObjectName("ZimonScreenTitle")
+        sub = QLabel(
+            "Design phases, attach stimuli, validate, and export JSON — "
+            "below: saved presets and library paths for your account."
+        )
+        sub.setObjectName("ZimonScreenSubtitle")
+        sub.setWordWrap(True)
+        col = QVBoxLayout()
+        col.addWidget(title)
+        col.addWidget(sub)
+        hrow.addLayout(col, 1)
+        tag = QLabel("• Adult module")
+        tag.setStyleSheet("color: #64748b; font-size: 12px; font-weight: 600;")
+        hrow.addWidget(tag, 0, Qt.AlignmentFlag.AlignTop)
+        l.addLayout(hrow)
+        warn = QLabel(
+            "Hardware incomplete — connect Arduino + camera for full operation."
+        )
+        warn.setObjectName("ProtocolBuilderWarn")
+        warn.setWordWrap(True)
+        l.addWidget(warn)
+        l.addWidget(self.presets_tab, 1)
+        return w
+
+    def _build_experiments_page(self) -> QWidget:
+        w = QWidget()
+        l = QVBoxLayout(w)
+        l.setContentsMargins(16, 14, 16, 12)
+        l.setSpacing(10)
+        top = QHBoxLayout()
+        title = QLabel(SCREEN_EXPERIMENTS)
+        title.setObjectName("ZimonScreenTitle")
+        top.addWidget(title)
+        top.addStretch(1)
+        refresh = QPushButton("Refresh list")
+        refresh.setObjectName("SecondaryOutlineBtn")
+        refresh.clicked.connect(self._experiments_refresh_stub)
+        top.addWidget(refresh)
+        l.addLayout(top)
+        hint = QLabel(
+            "Browse recordings, playback, and analysis — load videos from disk; "
+            "authenticated media URLs follow your API host. Timeline aligns with protocols from Adult or Protocol Builder."
+        )
+        hint.setObjectName("ZimonScreenSubtitle")
+        hint.setWordWrap(True)
+        l.addWidget(hint)
+        l.addWidget(self.analysis_tab, 1)
+        return w
+
+    def _experiments_refresh_stub(self):
+        QMessageBox.information(
+            self,
+            "Experiments",
+            "List refresh: use Analysis tab actions to load files from disk.",
+        )
+
     def _account_profile_initials(self, d):
         """Two-letter avatar text from full name or username."""
         name = (d.get("full_name") or "").strip()
@@ -639,14 +749,16 @@ class MainWindow(QMainWindow):
     def _build_account_tab(self):
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.setContentsMargins(0, 8, 0, 0)
-        outer.setSpacing(16)
+        outer.setContentsMargins(16, 14, 16, 0)
+        outer.setSpacing(10)
 
-        intro = QLabel("Account")
-        intro.setStyleSheet(
-            "font-size: 18px; font-weight: 600; color: #e8e9ea; padding: 4px 0px 0px 0px;"
-        )
+        intro = QLabel(SCREEN_ACCOUNT)
+        intro.setObjectName("ZimonScreenTitle")
         outer.addWidget(intro)
+        intro_sub = QLabel("Profile, session, and sign out.")
+        intro_sub.setObjectName("ZimonScreenSubtitle")
+        intro_sub.setWordWrap(True)
+        outer.addWidget(intro_sub)
 
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
@@ -911,34 +1023,13 @@ class MainWindow(QMainWindow):
         since = d.get("created_at")
         self._acct_val_member_since.setText(str(since) if since else "—")
 
+        if getattr(self, "_nav_profile_btn", None):
+            fn = (d.get("full_name") or "User").strip() or "User"
+            self._nav_profile_btn.setText(f"  {fn}  ▾  ")
+
     def _logout(self):
-        """Overridden in ui.main_window for real logout."""
+        """Implemented in ui.main_window for desktop session + login flow."""
         pass
-
-    # ---------- HEADER ----------
-    def _build_header(self):
-        layout = QHBoxLayout()
-        layout.setSpacing(12)
-        layout.setContentsMargins(0, 0, 0, 8)
-
-        self.page_title = QLabel("Environment")
-        self.page_title.setObjectName("PageTitle")
-        layout.addWidget(self.page_title)
-
-        layout.addStretch()
-
-        theme_btn = QPushButton("Theme")
-        theme_btn.setObjectName("ThemeToggleBtn")
-        theme_btn.setToolTip("Toggle light / dark theme")
-        theme_btn.clicked.connect(self._on_toggle_theme)
-        layout.addWidget(theme_btn)
-
-        status_label = QLabel("🔌 Arduino: Checking...")
-        status_label.setObjectName("ArduinoStatus")
-        self.arduino_status_label = status_label
-        layout.addWidget(status_label)
-
-        return layout
 
     def _on_toggle_theme(self):
         try:
@@ -984,45 +1075,31 @@ class MainWindow(QMainWindow):
         scroll.setWidget(page)
         return scroll
 
-    # ---------- EXPERIMENT TAB ----------
-    def _experiment_tab(self):
-        from PyQt6.QtWidgets import QSizePolicy, QScrollArea
-        
-        # Create scroll area for the entire tab
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        
+    # ---------- RECORDING WORKSPACE (Adult / Larval) ----------
+    def _build_workspace_center_page(self) -> QWidget:
+        """Single shared center column: camera, status, stimuli, run controls."""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(10)
 
-        # Top section: Camera and experiment status side by side
         top_section = QHBoxLayout()
         top_section.setSpacing(14)
-        
-        # Create camera preview widget (shares preview label reference)
+
         camera_preview = self._camera_preview_box()
         experiment_status = self._experiment_status_box()
-        
-        # Set maximum height for camera preview
         camera_preview.setMaximumHeight(400)
-        
+
         top_section.addWidget(camera_preview, 3)
         top_section.addWidget(experiment_status, 2)
-
         layout.addLayout(top_section)
         layout.addWidget(self._stimuli_controls())
 
-        # Action buttons with experiment info
-        actions_container = QGroupBox("Experiment Control")
+        actions_container = QGroupBox("Run & manual test")
         actions_layout = QVBoxLayout(actions_container)
         actions_layout.setContentsMargins(16, 20, 16, 16)
         actions_layout.setSpacing(12)
 
-        # Experiment timer/info
         timer_layout = QHBoxLayout()
         timer_layout.setSpacing(10)
         self.experiment_timer_label = QLabel("Duration: 00:00")
@@ -1031,11 +1108,10 @@ class MainWindow(QMainWindow):
         timer_layout.addStretch()
         actions_layout.addLayout(timer_layout)
 
-        # Buttons
         actions = QHBoxLayout()
         actions.setSpacing(10)
         actions.addStretch()
-        start_btn = QPushButton("▶ Start Experiment")
+        start_btn = QPushButton("▶ Start experiment")
         start_btn.setMinimumWidth(160)
         start_btn.clicked.connect(self._on_start_experiment)
         actions.addWidget(start_btn)
@@ -1045,16 +1121,13 @@ class MainWindow(QMainWindow):
         stop.clicked.connect(self._on_stop_experiment)
         stop.setEnabled(False)
         actions.addWidget(stop)
-        
-        # Store button references
+
         self.start_btn = start_btn
         self.stop_btn = stop
 
         actions_layout.addLayout(actions)
         layout.addWidget(actions_container)
-
-        scroll.setWidget(page)
-        return scroll
+        return page
 
     # ---------- CAMERA ----------
     def _camera_preview_box(self):
@@ -1239,6 +1312,7 @@ class MainWindow(QMainWindow):
         zoom_layout.addWidget(self.zoom_slider)
         self.zoom_label = QLabel("1.0x")
         zoom_layout.addWidget(self.zoom_label)
+        self.zoom_value_label = self.zoom_label
         layout.addLayout(zoom_layout)
 
         # Resolution control
@@ -1604,7 +1678,30 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"Error checking connection: {e}")
             self._update_arduino_status(False, "Error")
-    
+        self._refresh_workspace_alert_banner()
+        self._sync_system_ready_badge()
+
+    def _sync_system_ready_badge(self):
+        if not getattr(self, "_run_ready_badge", None):
+            return
+        ok_hw = self.arduino and self.arduino.is_connected()
+        cams = []
+        if self.camera:
+            try:
+                cams = self.camera.list_cameras() or []
+            except Exception:
+                pass
+        if ok_hw and cams:
+            self._run_ready_badge.setText("SYSTEM READY")
+            self._run_ready_badge.setStyleSheet(
+                "color: #22c55e; font-weight: 700; font-size: 11px; "
+                "padding: 4px 10px; background: rgba(34,197,94,0.12); "
+                "border-radius: 8px; border: 1px solid rgba(34,197,94,0.35);"
+            )
+        else:
+            self._run_ready_badge.setText("SYSTEM NOT READY")
+            self._run_ready_badge.setStyleSheet("")
+
     def _update_arduino_status(self, connected, message):
         """Update Arduino connection status label"""
         if self.arduino_status_label:
@@ -1613,6 +1710,8 @@ class MainWindow(QMainWindow):
             self.arduino_status_label.setStyleSheet(
                 f"color: {ok}; font-size: 11px; padding: 6px 12px; font-weight: 600;"
             )
+        self._refresh_workspace_alert_banner()
+        self._sync_system_ready_badge()
 
     def _map_to_pwm(self, value_0_100):
         """Map slider value (0-100) to PWM value (0-255)"""
@@ -1988,7 +2087,10 @@ class MainWindow(QMainWindow):
                 self._on_camera_selected(cameras[0])
         else:
             self.logger.warning("No cameras found after refresh")
-    
+
+        self._refresh_workspace_alert_banner()
+        self._sync_system_ready_badge()
+
     def _sync_all_camera_combos(self):
         """Sync all camera combo boxes with main combo"""
         if not self.camera_combo:
@@ -2240,7 +2342,7 @@ class MainWindow(QMainWindow):
     def _on_zoom_changed(self, value: int):
         """Handle zoom change - uses CameraController safety"""
         zoom_value = value / 100.0
-        if hasattr(self, 'zoom_value_label') and self.zoom_value_label:
+        if hasattr(self, "zoom_value_label") and self.zoom_value_label:
             self.zoom_value_label.setText(f"{zoom_value:.1f}x")
         
         if not self.current_camera or not self.camera:
@@ -2307,157 +2409,3 @@ class MainWindow(QMainWindow):
             # Re-enable control after operation
             QTimer.singleShot(500, lambda: self.resolution_combo.setEnabled(True))
 
-
-def _update_camera_frame(self, frame: np.ndarray):
-    """Update camera preview with new frame - optimized for performance"""
-    if not self.camera_preview_labels:
-        return
-    
-    try:
-        # Process all frames for accurate FPS counting
-        current_time = time.time()
-        
-        # Simple FPS counter
-        self.fps_frame_times.append(current_time)
-        self.fps_frame_times = [t for t in self.fps_frame_times[-60:] if current_time - t < 1.0]
-        
-        if len(self.fps_frame_times) > 1:
-            time_span = self.fps_frame_times[-1] - self.fps_frame_times[0]
-            self.current_fps = len(self.fps_frame_times) / time_span if time_span > 0 else 0
-        
-        # Update FPS label
-        if self.fps_counter_label:
-            self.fps_counter_label.setText(f"FPS: {self.current_fps:.1f}")
-        
-        # Convert frame to RGB - handle different camera formats (optimized for speed)
-        try:
-            if frame is None:
-                return
-                
-            # Handle different frame formats from different cameras
-            if len(frame.shape) == 2:
-                # Grayscale frame - convert to RGB (faster for Basler Mono8)
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-            elif len(frame.shape) == 3:
-                if frame.shape[2] == 3:
-                    # BGR frame - convert to RGB
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                elif frame.shape[2] == 4:
-                    # BGRA frame - convert to RGB
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
-                else:
-                    # Unknown format, use as-is
-                    rgb_frame = frame
-            else:
-                # Unknown format, use as-is
-                rgb_frame = frame
-                
-        except Exception as e:
-            self.logger.error(f"Error converting frame format: {e}, frame shape: {frame.shape if frame is not None else 'None'}")
-            return
-        
-        # Get first visible preview label
-        preview_label = None
-        for label in self.camera_preview_labels:
-            if label and label.isVisible():
-                preview_label = label
-                break
-        
-        if preview_label is None:
-            return
-        
-        # Cache label dimensions to avoid repeated calls
-        if not hasattr(self, '_cached_label_size') or self._cached_label_size != (preview_label.width(), preview_label.height()):
-            self._cached_label_size = (preview_label.width(), preview_label.height())
-            self._cached_scaled_size = (
-                max(preview_label.width(), 320),
-                max(preview_label.height(), 240)
-            )
-        
-        # Create QImage directly from numpy array - optimized for high FPS
-        try:
-            h, w = rgb_frame.shape[:2]
-            
-            # Determine bytes per line based on frame format
-            if len(rgb_frame.shape) == 3:
-                bytes_per_line = w * rgb_frame.shape[2]
-            else:
-                bytes_per_line = w * 3  # Default to 3 channels
-            
-            # Use ascontiguousarray to ensure memory layout (faster for high FPS)
-            rgb_frame_contiguous = np.ascontiguousarray(rgb_frame)
-            
-            # Create QImage with error checking
-            if len(rgb_frame_contiguous.shape) == 3 and rgb_frame_contiguous.shape[2] == 3:
-                qt_image = QImage(rgb_frame_contiguous.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            elif len(rgb_frame_contiguous.shape) == 2:
-                # Grayscale
-                qt_image = QImage(rgb_frame_contiguous.data, w, h, bytes_per_line, QImage.Format.Format_Grayscale8)
-            else:
-                # Fallback format
-                qt_image = QImage(rgb_frame_contiguous.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
-            
-            if qt_image.isNull():
-                self.logger.warning(f"Failed to create QImage from frame shape: {rgb_frame_contiguous.shape}")
-                return
-            
-            # Scale pixmap once using cached size and zoom
-            # Get current zoom setting
-            zoom = self.camera.get_setting(self.current_camera, "zoom") if self.camera and self.current_camera else 1.0
-            zoom = zoom if zoom is not None else 1.0
-            
-            # Apply zoom to scaling
-            scaled_width = int(self._cached_scaled_size[0] * zoom)
-            scaled_height = int(self._cached_scaled_size[1] * zoom)
-            
-            # Use FastTransformation for high FPS
-            scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
-                scaled_width,
-                scaled_height,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.FastTransformation
-            )
-            
-            # Update label
-            preview_label.setPixmap(scaled_pixmap)
-            
-        except Exception as e:
-            self.logger.error(f"Error creating QImage from frame: {e}, frame shape: {rgb_frame.shape if rgb_frame is not None else 'None'}")
-            return
-        
-    except Exception as e:
-        self.logger.error(f"Error updating camera frame: {e}")
-    
-    def _restart_preview_with_new_resolution(self, camera_name: str):
-        """Restart camera preview with new resolution - non-blocking"""
-        try:
-            if self.camera.start_preview(camera_name, self._update_camera_frame):
-                self.logger.info(f"Restarted preview for {camera_name} with new resolution")
-            else:
-                self.logger.error(f"Failed to restart preview for {camera_name}")
-        except Exception as e:
-            self.logger.error(f"Error restarting preview: {e}")
-    
-    def _update_resolution_display(self):
-        """Update resolution display after change"""
-        if self.current_camera and self.camera:
-            resolution = self.camera.get_resolution(self.current_camera)
-            if resolution and self.camera_resolution_label:
-                w, h = resolution
-                self.camera_resolution_label.setText(f"Resolution: {w}x{h}")
-                # Update combo box to show actual resolution
-                if hasattr(self, 'resolution_combo'):
-                    resolution_str = f"{w}x{h}"
-                    self.resolution_combo.blockSignals(True)
-                    index = self.resolution_combo.findText(resolution_str)
-                    if index >= 0:
-                        self.resolution_combo.setCurrentIndex(index)
-                    else:
-                        # Add if not in list
-                        self.resolution_combo.addItem(resolution_str)
-                        self.resolution_combo.setCurrentText(resolution_str)
-                    self.resolution_combo.blockSignals(False)
-
-
-# End of MainWindow class
-            

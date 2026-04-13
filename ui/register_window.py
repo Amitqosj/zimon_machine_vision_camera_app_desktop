@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-from database.auth import register_user
+from database.auth import ROLE_ADMIN, ROLE_STUDENT, create_user
 
 
 class RegisterWindow(QWidget):
@@ -185,10 +185,14 @@ class RegisterWindow(QWidget):
             QMessageBox.warning(self, "Password Mismatch", "Password and confirm password do not match.")
             return
 
-        ok, msg = register_user(full_name, username, email, password, role)
+        role_norm = (role or "").strip().lower()
+        db_role = ROLE_ADMIN if role_norm == "admin" else ROLE_STUDENT
+        ok, result = create_user(full_name, username, email, password, db_role)
         if ok:
-            QMessageBox.information(self, "Success", msg)
+            QMessageBox.information(
+                self, "Success", "Account created. You can sign in now."
+            )
             self.back_to_login.emit()
         else:
-            QMessageBox.warning(self, "Registration Failed", str(msg))
+            QMessageBox.warning(self, "Registration Failed", str(result))
 

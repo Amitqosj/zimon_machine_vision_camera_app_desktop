@@ -61,7 +61,7 @@ def main():
     
     try:
         # Import main application
-        from gui.main_window import MainWindow
+        from ui.main_window import MainWindow
         from PyQt6.QtWidgets import QApplication
         
         # Create application with optimized settings

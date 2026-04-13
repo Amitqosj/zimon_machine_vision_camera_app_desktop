@@ -1,2 +1,0 @@
-# Shell scripts must use LF so Render/Linux can execute them.
-*.sh text eol=lf

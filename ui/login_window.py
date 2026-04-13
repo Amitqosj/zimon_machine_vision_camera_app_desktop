@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-from database.auth import login_user
+from database.auth import verify_login_credentials, set_active_session
 from ui.register_window import RegisterWindow
 
 
@@ -150,8 +150,9 @@ class LoginWindow(QWidget):
             QMessageBox.warning(self, "Missing Fields", "Please enter username/email and password.")
             return
 
-        ok, payload = login_user(username_or_email, password)
+        ok, payload = verify_login_credentials(username_or_email, password)
         if ok:
+            set_active_session(int(payload["id"]))
             QMessageBox.information(self, "Login Successful", f"Welcome, {payload['full_name']}")
             self.login_success.emit(payload)
             self.close()

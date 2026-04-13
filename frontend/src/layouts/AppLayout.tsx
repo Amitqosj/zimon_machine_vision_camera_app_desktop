@@ -247,11 +247,11 @@ export function AppLayout() {
 
       <div className="flex min-h-0 flex-1 gap-3 px-3 py-3 md:px-4">
         {showExecutionPanels ? (
-        <aside className="zimon-glass-panel hidden w-[260px] shrink-0 flex-col p-3 lg:flex">
-          <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted">
+        <aside className="zimon-glass-panel hidden w-[268px] shrink-0 flex-col gap-0 p-4 lg:flex">
+          <div className="mb-3.5 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted">
             Top recording assays
           </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto pr-0.5">
             {assaysShown.map((a) => {
               const sel = ctx.selectedAssayId === a.id
               return (
@@ -293,9 +293,9 @@ export function AppLayout() {
         </main>
 
         {showExecutionPanels ? (
-        <aside className="zimon-glass-panel hidden w-[248px] shrink-0 flex-col gap-4 p-3 xl:flex">
-          <div>
-            <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted dark:text-cyan-200/55">
+        <aside className="zimon-glass-panel hidden w-[256px] shrink-0 flex-col gap-5 p-4 xl:flex">
+          <div className="shrink-0">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted dark:text-cyan-200/55">
               Select well plate
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -325,11 +325,11 @@ export function AppLayout() {
               })}
             </div>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted dark:text-cyan-200/55">
+          <div className="flex min-h-0 flex-1 flex-col border-t border-cyan-500/10 pt-5 dark:border-cyan-500/12">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-zimon-muted dark:text-cyan-200/55">
               Recipes
             </div>
-            <div className="flex flex-col gap-2 overflow-y-auto pr-0.5">
+            <div className="flex flex-col gap-2.5 overflow-y-auto overscroll-contain pr-0.5">
               {RECIPES.map((r) => {
                 const sel = ctx.selectedRecipeId === r.id
                 const Icon = RECIPE_ICONS[r.id] ?? SlidersHorizontal
@@ -358,7 +358,7 @@ export function AppLayout() {
             </div>
             <Link
               to="/app/protocol-builder"
-              className="mt-2.5 flex items-center justify-center gap-2 rounded-xl border border-zimon-border py-2 text-xs font-semibold text-zimon-fg transition-colors hover:border-cyan-400/30 hover:bg-zimon-card/60 dark:border-cyan-500/15 dark:hover:bg-slate-800/50"
+              className="mt-4 flex shrink-0 items-center justify-center gap-2 rounded-xl border border-zimon-border py-2.5 text-xs font-semibold text-zimon-fg transition-colors hover:border-cyan-400/30 hover:bg-zimon-card/60 dark:border-cyan-500/15 dark:hover:bg-slate-800/50"
             >
               <FolderOpen className="h-4 w-4" />
               Protocol Builder

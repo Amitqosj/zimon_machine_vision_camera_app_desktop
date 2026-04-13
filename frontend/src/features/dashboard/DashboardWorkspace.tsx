@@ -33,7 +33,7 @@ type Props = {
 function hardwareDot(ok: boolean, warn: boolean) {
   if (ok) return 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]'
   if (warn) return 'bg-amber-400'
-  return 'bg-red-500/80'
+  return 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.45)]'
 }
 
 export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
@@ -252,11 +252,11 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
       />
 
       {/* Module header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-slate-950/50 px-4 py-3 dark:bg-slate-950/60">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/20 bg-slate-950/50 px-4 py-3.5 dark:bg-slate-950/60">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
           <span
             className={[
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide',
+              'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em]',
               experimentStatus === 'Running'
                 ? 'border-sky-500/40 bg-sky-500/15 text-sky-300'
                 : experimentStatus === 'Ready'
@@ -266,7 +266,7 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
           >
             <span
               className={[
-                'h-2 w-2 rounded-full',
+                'h-2 w-2 shrink-0 rounded-full',
                 experimentStatus === 'Running' ? 'animate-pulse bg-red-500' : 'bg-slate-500',
               ].join(' ')}
             />
@@ -281,10 +281,14 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
             <span className="font-mono text-cyan-200/90">{ws.experimentRunId || '—'}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wide">
+        <div className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.14em]">
           <span className="text-zimon-muted">System</span>
           <span
-            className={systemReady ? 'text-emerald-400' : 'text-amber-400'}
+            className={
+              systemReady
+                ? 'rounded-md bg-emerald-500/15 px-2 py-0.5 text-emerald-400'
+                : 'rounded-md bg-amber-500/15 px-2 py-0.5 text-amber-300'
+            }
             title={systemReady ? 'Arduino and primary camera available' : 'Check connections'}
           >
             {systemReady ? 'Ready' : 'Not ready'}
@@ -305,9 +309,9 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
         </p>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         {/* Left column */}
-        <aside className="xl:col-span-3 space-y-3">
+        <aside className="space-y-4 xl:col-span-3">
           <div className="rounded-xl border border-zimon-border/70 bg-zimon-card/40 p-3 dark:border-cyan-500/15 dark:bg-slate-950/40">
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zimon-muted dark:text-cyan-200/55">
               Protocol
@@ -404,7 +408,7 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zimon-muted dark:text-cyan-200/55">
               Hardware
             </h3>
-            <ul className="space-y-2 text-[11px]">
+            <ul className="space-y-3 text-[11px]">
               {(
                 [
                   ['Camera', !!camApi.cam && camApi.previewOn, !!camApi.cam],
@@ -414,11 +418,16 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
                   ['Water', water.on, arduinoOk],
                 ] as const
               ).map(([label, active, link]) => (
-                <li key={label} className="flex items-center justify-between gap-2">
-                  <span className="text-zimon-muted">{label}</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${hardwareDot(active, link && !active)}`} />
-                    <span className="text-zimon-fg">{active ? 'Active' : link ? 'Standby' : 'N/A'}</span>
+                <li key={label} className="flex items-center justify-between gap-3 border-b border-white/[0.04] pb-3 last:border-0 last:pb-0 dark:border-cyan-500/[0.07]">
+                  <span className="min-w-[4.5rem] shrink-0 text-zimon-muted">{label}</span>
+                  <span className="flex min-w-0 items-center justify-end gap-3">
+                    <span
+                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${hardwareDot(active, link && !active)}`}
+                      aria-hidden
+                    />
+                    <span className="text-right tabular-nums text-zimon-fg">
+                      {active ? 'Active' : link ? 'Standby' : 'N/A'}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -427,14 +436,23 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
         </aside>
 
         {/* Center */}
-        <div className="min-w-0 space-y-3 xl:col-span-6">
-          <div className="zimon-camera-frame relative flex min-h-0 flex-col overflow-hidden rounded-2xl">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-cyan-500/15 bg-slate-950/95 px-3 py-2 backdrop-blur-md dark:border-cyan-500/20 sm:px-4">
-              <div className="flex min-w-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/95 sm:text-[11px]">
+        <div className="min-w-0 space-y-4 xl:col-span-6">
+          <div className="zimon-camera-frame relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-cyan-500/10 bg-[#060a10] dark:border-cyan-500/12">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-cyan-500/15 bg-slate-950/95 px-3 py-2.5 backdrop-blur-md dark:border-cyan-500/20 sm:px-4">
+              <div className="flex min-w-0 items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/95 sm:text-[11px]">
                 <Video className="h-3.5 w-3.5 shrink-0 text-cyan-400" strokeWidth={2.25} />
                 <span className="truncate">Live Feed</span>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                {showCameraStream && camApi.meta?.resolution ? (
+                  <span
+                    className="shrink-0 font-mono text-[10px] tabular-nums text-cyan-200/85 sm:text-[11px]"
+                    title="Stream resolution and frame rate"
+                  >
+                    {camApi.meta.resolution[0]}×{camApi.meta.resolution[1]}
+                    {camApi.meta.fps != null ? ` · ${Number(camApi.meta.fps).toFixed(0)} FPS` : ''}
+                  </span>
+                ) : null}
                 {exp.running ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-red-400 sm:text-[11px]">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
@@ -442,7 +460,7 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
                   </span>
                 ) : null}
                 {camApi.cam && camApi.previewOn ? (
-                  <span className="text-[10px] font-semibold text-emerald-400 sm:text-[11px]">Camera Connected</span>
+                  <span className="text-[10px] font-semibold text-emerald-400 sm:text-[11px]">Connected</span>
                 ) : camApi.cam ? (
                   <span className="text-[10px] font-semibold text-amber-300 sm:text-[11px]">Standby</span>
                 ) : (
@@ -453,42 +471,36 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
 
             <div
               ref={videoRef}
-              className="relative flex min-h-[200px] flex-1 items-center justify-center md:min-h-[280px]"
+              className={[
+                'relative flex w-full flex-1 flex-col items-center justify-center',
+                showCameraStream ? 'min-h-[min(44vh,400px)]' : 'min-h-[min(42vh,340px)] py-8',
+              ].join(' ')}
             >
               {showCameraStream ? (
-                <span className="absolute left-3 top-3 z-20 rounded-md border border-cyan-500/25 bg-slate-950/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200/90 backdrop-blur-sm">
-                  {wellSize}-well
-                </span>
-              ) : null}
-
-              <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-white/10 bg-slate-950/65 px-2.5 py-1 text-[10px] tabular-nums text-white/90 backdrop-blur-md">
-                {camApi.meta?.resolution
-                  ? `${camApi.meta.resolution[0]} × ${camApi.meta.resolution[1]}`
-                  : '— × —'}{' '}
-                ·{' '}
-                {camApi.meta?.fps != null ? `${Number(camApi.meta.fps).toFixed(0)} FPS` : '— FPS'}
-              </div>
-              <button
-                type="button"
-                onClick={() => void toggleFs()}
-                className="absolute bottom-3 right-3 z-10 rounded-xl border border-white/10 bg-slate-950/65 p-2 text-white shadow-md backdrop-blur-md transition-colors hover:border-cyan-400/30 hover:bg-slate-900/80"
-                title={fs ? 'Exit fullscreen' : 'Fullscreen'}
-              >
-                {fs ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </button>
-
-              {showCameraStream ? (
-                <CameraLivePreview
-                  active
-                  className="max-h-[min(48vh,420px)] w-full object-contain"
-                  alt="Camera"
-                />
-              ) : (
-                <div className="flex max-w-lg flex-col items-center gap-4 px-6 py-4">
-                  <WellPlateSchematic wells={wellSize} />
-                  <span className="text-center text-sm text-white/50">
-                    {!camApi.cam ? 'Choose a camera, then enable preview' : 'Enable Camera Preview to stream'}
+                <>
+                  <span className="absolute left-3 top-3 z-20 rounded-md border border-cyan-500/25 bg-slate-950/85 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-200/90 backdrop-blur-sm">
+                    {wellSize}-well
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => void toggleFs()}
+                    className="absolute right-3 top-3 z-20 rounded-xl border border-white/10 bg-slate-950/75 p-2 text-white shadow-md backdrop-blur-md transition-colors hover:border-cyan-400/30 hover:bg-slate-900/80"
+                    title={fs ? 'Exit fullscreen' : 'Fullscreen'}
+                  >
+                    {fs ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </button>
+                  <CameraLivePreview
+                    active
+                    className="max-h-[min(48vh,420px)] w-full object-contain"
+                    alt="Camera"
+                  />
+                </>
+              ) : (
+                <div className="flex w-full max-w-md flex-col items-center justify-center gap-5 px-6">
+                  <WellPlateSchematic wells={wellSize} className="w-full" />
+                  <p className="max-w-sm text-center text-[13px] leading-relaxed text-slate-400">
+                    {!camApi.cam ? 'Choose a camera, then enable preview.' : 'Turn on Camera Preview below to stream live video.'}
+                  </p>
                 </div>
               )}
             </div>
@@ -508,20 +520,22 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
               onStopPreview={() => void camApi.stopPreview()}
               onPlayPreview={() => void camApi.startPreview()}
               onBumpDuration={(d) => exp.setDurationS(Math.max(0, exp.durationS + d))}
-              className="rounded-none rounded-b-2xl border-0 border-t border-cyan-500/15 bg-slate-950/80 py-2 shadow-none dark:border-cyan-500/18 dark:bg-slate-950/85 dark:shadow-none"
+              className="rounded-none rounded-b-2xl border-0 border-t border-cyan-500/15 bg-slate-950/80 py-2.5 shadow-none dark:border-cyan-500/18 dark:bg-slate-950/85 dark:shadow-none"
             />
           </div>
 
           {/* Phase timeline */}
-          <div className="rounded-xl border border-cyan-500/15 bg-slate-950/50 p-3 dark:border-cyan-500/20">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zimon-muted">Experiment timeline</div>
-            <div className="flex h-10 overflow-hidden rounded-lg border border-white/10">
+          <div className="rounded-xl border border-cyan-500/15 bg-slate-950/50 p-4 dark:border-cyan-500/20">
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-zimon-muted">
+              Experiment timeline
+            </div>
+            <div className="flex min-h-[2.75rem] overflow-hidden rounded-lg border border-white/10">
               {phaseWidths.map((seg, i) => (
                 <div
                   key={`${seg.label}-${i}`}
                   style={{ width: `${seg.pct}%` }}
                   className={[
-                    'flex items-center justify-center border-r border-white/10 px-1 text-[9px] font-bold uppercase last:border-r-0',
+                    'flex min-w-0 items-center justify-center border-r border-white/10 px-2 py-2 text-[9px] font-bold uppercase leading-tight last:border-r-0 sm:text-[10px]',
                     seg.kind === 'stimulus'
                       ? 'bg-sky-600/40 text-sky-100'
                       : seg.kind === 'recovery'
@@ -530,35 +544,38 @@ export function DashboardWorkspace({ plateWells, variant = 'adult' }: Props) {
                   ].join(' ')}
                   title={seg.label}
                 >
-                  <span className="truncate">{seg.label}</span>
+                  <span className="line-clamp-2 text-center">{seg.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Bottom info */}
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-zimon-border/60 bg-zimon-card/30 px-3 py-2 text-[10px] dark:border-cyan-500/10 sm:grid-cols-4">
-            <div>
-              <span className="text-zimon-muted">Duration</span>
-              <div className="font-mono text-zimon-fg">{exp.timerLabel}</div>
-            </div>
-            <div>
-              <span className="text-zimon-muted">Clock</span>
-              <div className="font-mono text-zimon-fg">{new Date().toLocaleTimeString()}</div>
-            </div>
-            <div>
-              <span className="text-zimon-muted">Phase</span>
-              <div className="font-semibold text-cyan-200/90">{ws.currentPhaseLabel}</div>
-            </div>
-            <div className="col-span-2 min-w-0 sm:col-span-1">
-              <span className="text-zimon-muted">Stimuli</span>
-              <div className="truncate text-zimon-fg">{exp.activeList}</div>
+          {/* Bottom info — separated from timeline so labels are never clipped */}
+          <div className="rounded-xl border border-zimon-border/60 bg-zimon-card/30 px-4 py-4 text-[10px] dark:border-cyan-500/10 sm:px-5">
+            <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.18em] text-zimon-muted">Session</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
+              <div className="min-w-0">
+                <span className="mb-1 block text-zimon-muted">Duration</span>
+                <div className="font-mono text-sm text-zimon-fg">{exp.timerLabel}</div>
+              </div>
+              <div className="min-w-0">
+                <span className="mb-1 block text-zimon-muted">Clock</span>
+                <div className="font-mono text-sm text-zimon-fg">{new Date().toLocaleTimeString()}</div>
+              </div>
+              <div className="min-w-0">
+                <span className="mb-1 block text-zimon-muted">Phase</span>
+                <div className="truncate text-sm font-semibold text-cyan-200/90">{ws.currentPhaseLabel}</div>
+              </div>
+              <div className="col-span-2 min-w-0 sm:col-span-1">
+                <span className="mb-1 block text-zimon-muted">Stimuli</span>
+                <div className="line-clamp-2 text-sm text-zimon-fg sm:truncate sm:line-clamp-none">{exp.activeList}</div>
+              </div>
             </div>
           </div>
         </div>
 
         {/* Right column */}
-        <aside className="space-y-3 xl:col-span-3">
+        <aside className="space-y-4 xl:col-span-3">
           <div className="rounded-xl border border-zimon-border/70 bg-zimon-card/40 p-3 dark:border-cyan-500/15 dark:bg-slate-950/40">
             <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zimon-muted dark:text-cyan-200/55">
               Run

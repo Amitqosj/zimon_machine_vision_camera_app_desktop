@@ -397,8 +397,8 @@ QPushButton#ThemeToggleBtn:hover {
 
 /* Dashboard side panels */
 QFrame#DashboardSidePanel {
-    background: rgba(26, 29, 35, 0.95);
-    border: 1px solid #2a2d36;
+    background: #12171f;
+    border: 1px solid #243044;
     border-radius: 12px;
 }
 
@@ -426,4 +426,190 @@ QFrame#DashboardStatusBar {
     color: #94a3b8;
     font-size: 11px;
     padding: 6px 12px;
+}
+
+/* Screen titles (Adult, Larval, Environment, …) */
+QLabel#ZimonScreenTitle {
+    font-size: 26px;
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.02em;
+    padding: 0 0 4px 0;
+}
+
+QLabel#ZimonScreenSubtitle {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.45;
+    padding-bottom: 6px;
+}
+
+/* Web-style top navigation (reference: deep navy + cyan accent) */
+QFrame#ZimonTopNav {
+    background-color: #0b0e14;
+    border-bottom: 1px solid #1a2332;
+}
+
+QLabel#ZimonNavLogo {
+    font-size: 28px;
+    min-width: 48px;
+    max-width: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0077e6, stop:1 #00a3ff);
+    border-radius: 24px;
+    color: #ffffff;
+    border: 1px solid rgba(0, 163, 255, 0.35);
+}
+
+QLabel#ZimonNavTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.06em;
+}
+
+QLabel#ZimonNavSubtitle {
+    font-size: 11px;
+    color: #8b9cb3;
+    font-weight: 500;
+}
+
+/* Secondary link next to logo — same family as nav, no yellow */
+QPushButton#ZimonCheckEnvBtn {
+    background-color: transparent;
+    color: #7dd3fc;
+    border: 1px solid rgba(0, 163, 255, 0.28);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+QPushButton#ZimonCheckEnvBtn:hover {
+    background-color: rgba(0, 163, 255, 0.12);
+    color: #e0f2fe;
+    border: 1px solid rgba(0, 163, 255, 0.5);
+}
+
+QPushButton#ZimonCheckEnvBtn:pressed {
+    background-color: rgba(0, 163, 255, 0.2);
+}
+
+QPushButton#ZimonNavPill {
+    background-color: transparent;
+    color: #8b9cb3;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QPushButton#ZimonNavPill:hover {
+    color: #e2e8f0;
+    background-color: rgba(30, 58, 95, 0.45);
+    border: 1px solid rgba(0, 163, 255, 0.15);
+}
+
+QPushButton#ZimonNavPill:checked {
+    background-color: rgba(0, 163, 255, 0.18);
+    color: #00d4ff;
+    border: 1px solid rgba(0, 163, 255, 0.55);
+}
+
+QPushButton#ZimonNavIconBtn {
+    background-color: #12171f;
+    color: #a8b9cc;
+    border: 1px solid #243044;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+QPushButton#ZimonNavIconBtn:hover {
+    background-color: #1a2332;
+    color: #e0f2fe;
+    border: 1px solid rgba(0, 163, 255, 0.35);
+}
+
+QPushButton#ZimonNavProfileBtn {
+    background-color: #12171f;
+    color: #e8eef4;
+    border: 1px solid #243044;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QPushButton#ZimonNavProfileBtn:hover {
+    border-color: rgba(0, 163, 255, 0.55);
+    background-color: #1a2332;
+}
+
+QLabel#ZimonNavArduinoChip {
+    background-color: #12171f;
+    border: 1px solid #243044;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#WorkspaceAlertBanner {
+    background-color: rgba(234, 179, 8, 0.08);
+    color: #fbbf24;
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+}
+
+QLabel#SystemNotReadyBadge {
+    color: #fbbf24;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 10px;
+    background: rgba(234, 179, 8, 0.12);
+    border-radius: 8px;
+    border: 1px solid rgba(234, 179, 8, 0.35);
+}
+
+QFrame#EnvironmentPageHeader {
+    background-color: #0f1419;
+    border-bottom: 1px solid #1e293b;
+}
+
+QLabel#ActionRequiredBadge {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: #facc15;
+    border: 1px solid rgba(234, 179, 8, 0.4);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
+
+QLabel#ProtocolBuilderWarn {
+    background-color: rgba(234, 179, 8, 0.08);
+    color: #fcd34d;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+}
+
+QPushButton#SecondaryOutlineBtn {
+    background-color: transparent;
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-weight: 600;
+}
+
+QPushButton#SecondaryOutlineBtn:hover {
+    background-color: rgba(56, 189, 248, 0.12);
 }

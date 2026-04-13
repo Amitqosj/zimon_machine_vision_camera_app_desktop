@@ -18,7 +18,7 @@ except ImportError:
 def _default_api_host() -> str:
     if os.environ.get("ZIMON_API_HOST"):
         return os.environ["ZIMON_API_HOST"]
-    # Render, Railway, Heroku, etc. set PORT — bind on all interfaces.
+    # When PORT is set (e.g. some hosts), bind on all interfaces.
     if os.environ.get("PORT"):
         return "0.0.0.0"
     return "127.0.0.1"
@@ -29,7 +29,7 @@ def _default_api_port() -> int:
     return int(raw)
 
 
-# Local dev: 127.0.0.1:8010. Cloud: 0.0.0.0:$PORT. Frontend `VITE_API_URL` must match the public API URL.
+# Default local: 127.0.0.1:8010. With PORT set: 0.0.0.0:$PORT. Match `VITE_API_URL` on the frontend.
 API_HOST = _default_api_host()
 API_PORT = _default_api_port()
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24 * 7
     cors_origins: str = os.environ.get(
         "ZIMON_CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
+        "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5180",
     )
     recovery_secret_key: str = os.environ.get("ZIMON_RECOVERY_SECRET", "")
     recovery_allow_ips: str = os.environ.get("ZIMON_RECOVERY_ALLOW_IPS", "")
