@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QRect, QSettings, pyqtSignal
-from PyQt6.QtGui import QFont, QPixmap
+from PyQt6.QtGui import QFont, QPainterPath, QPixmap, QRegion
 from PyQt6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -25,9 +25,8 @@ _IMAGES_DIR = Path(__file__).resolve().parent / "images"
 # Large-screen layout (login + forgot password)
 WINDOW_W = 1200
 WINDOW_H = 760
-CARD_W = 1040
-CARD_H = 660
-LEFT_W = 460
+CARD_W = int(WINDOW_W * 0.90)
+CARD_H = int(WINDOW_H * 0.88)
 MARGIN_X = (WINDOW_W - CARD_W) // 2
 MARGIN_Y = (WINDOW_H - CARD_H) // 2
 
@@ -72,6 +71,127 @@ def _hero_pixmap_cover(target_w: int, target_h: int) -> QPixmap | None:
     return scaled.copy(QRect(x, y, target_w, target_h))
 
 
+class ImagePanel(QFrame):
+    """Left split panel with cover image and rounded left corners."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("loginBrandPanel")
+        self._hero_pm: QPixmap | None = None
+        for p in _zimon11_paths():
+            if p.is_file():
+                pm = QPixmap(str(p))
+                if not pm.isNull():
+                    self._hero_pm = pm
+                    break
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+
+        self._image = QLabel()
+        self._image.setObjectName("loginHeroImage")
+        self._image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._image.setScaledContents(False)
+        lay.addWidget(self._image, 1)
+
+        if self._hero_pm is None:
+            fallback = QWidget()
+            fl = QVBoxLayout(fallback)
+            fl.setContentsMargins(28, 36, 28, 28)
+            fl.setSpacing(16)
+            fl.addStretch(1)
+            logo_lbl = QLabel()
+            logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo_pm = _pixmap(_IMAGES_DIR / "zimon-logo.png", 220, 220)
+            if logo_pm:
+                logo_lbl.setPixmap(logo_pm)
+            else:
+                logo_lbl.setText("ZIMON")
+                logo_lbl.setStyleSheet("color: #ffffff; font-size: 42px; font-weight: 800;")
+            fl.addWidget(logo_lbl)
+            zimon_title = QLabel("ZIMON")
+            zimon_title.setObjectName("loginBrandTitle")
+            zimon_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            f = QFont()
+            f.setPointSize(26)
+            f.setWeight(QFont.Weight.Bold)
+            zimon_title.setFont(f)
+            fl.addWidget(zimon_title)
+            chamber_line = QLabel(
+                "ZEBRAFISH INTEGRATED MOTION &\nOPTICAL NEUROANALYSIS CHAMBER"
+            )
+            chamber_line.setObjectName("loginBrandSubtitle")
+            chamber_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            chamber_line.setWordWrap(True)
+            fl.addWidget(chamber_line)
+            fl.addStretch(2)
+            lay.addWidget(fallback, 1)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_left_corner_mask()
+        if self._hero_pm is None:
+            return
+        target_w = max(1, self.width())
+        target_h = max(1, self.height())
+        scaled = self._hero_pm.scaled(
+            target_w,
+            target_h,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        x = max(0, (scaled.width() - target_w) // 2)
+        y = max(0, (scaled.height() - target_h) // 2)
+        self._image.setPixmap(scaled.copy(QRect(x, y, target_w, target_h)))
+
+    def _apply_left_corner_mask(self) -> None:
+        w = max(1, self.width())
+        h = max(1, self.height())
+        r = 24.0
+        path = QPainterPath()
+        path.moveTo(r, 0)
+        path.lineTo(w, 0)
+        path.lineTo(w, h)
+        path.lineTo(r, h)
+        path.quadTo(0, h, 0, h - r)
+        path.lineTo(0, r)
+        path.quadTo(0, 0, r, 0)
+        path.closeSubpath()
+        self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
+class LoginSplitContainer(QFrame):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("loginShellCard")
+
+
+class LoginFormPanel(QFrame):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("loginFormPanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_right_corner_mask()
+
+    def _apply_right_corner_mask(self) -> None:
+        w = max(1, self.width())
+        h = max(1, self.height())
+        r = 24.0
+        path = QPainterPath()
+        path.moveTo(0, 0)
+        path.lineTo(w - r, 0)
+        path.quadTo(w, 0, w, r)
+        path.lineTo(w, h - r)
+        path.quadTo(w, h, w - r, h)
+        path.lineTo(0, h)
+        path.closeSubpath()
+        self.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
 def styled_input_row(glyph: str, placeholder: str) -> tuple[QFrame, QLineEdit]:
     wrap = QFrame()
     wrap.setObjectName("loginInputShell")
@@ -89,53 +209,8 @@ def styled_input_row(glyph: str, placeholder: str) -> tuple[QFrame, QLineEdit]:
 
 
 def brand_hero_left_panel() -> QFrame:
-    """Left column: full zimon11 hero or text fallback (shared login / forgot)."""
-    left = QFrame()
-    left.setObjectName("loginBrandPanel")
-    left.setFixedSize(LEFT_W, CARD_H)
-    left_lay = QVBoxLayout(left)
-    left_lay.setContentsMargins(0, 0, 0, 0)
-    left_lay.setSpacing(0)
-
-    hero_pm = _hero_pixmap_cover(LEFT_W, CARD_H)
-    if hero_pm:
-        hero = QLabel()
-        hero.setObjectName("loginHeroImage")
-        hero.setPixmap(hero_pm)
-        hero.setFixedSize(LEFT_W, CARD_H)
-        hero.setScaledContents(False)
-        hero.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_lay.addWidget(hero, 1)
-    else:
-        left_lay.setContentsMargins(28, 36, 28, 28)
-        left_lay.setSpacing(16)
-        left_lay.addStretch(1)
-        logo_lbl = QLabel()
-        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_pm = _pixmap(_IMAGES_DIR / "zimon-logo.png", 220, 220)
-        if logo_pm:
-            logo_lbl.setPixmap(logo_pm)
-        else:
-            logo_lbl.setText("ZIMON")
-            logo_lbl.setStyleSheet("color: #ffffff; font-size: 42px; font-weight: 800;")
-        left_lay.addWidget(logo_lbl)
-        zimon_title = QLabel("ZIMON")
-        zimon_title.setObjectName("loginBrandTitle")
-        zimon_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        f = QFont()
-        f.setPointSize(26)
-        f.setWeight(QFont.Weight.Bold)
-        zimon_title.setFont(f)
-        left_lay.addWidget(zimon_title)
-        chamber_line = QLabel(
-            "ZEBRAFISH INTEGRATED MOTION &\nOPTICAL NEUROANALYSIS CHAMBER"
-        )
-        chamber_line.setObjectName("loginBrandSubtitle")
-        chamber_line.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chamber_line.setWordWrap(True)
-        left_lay.addWidget(chamber_line)
-        left_lay.addStretch(2)
-    return left
+    """Left split panel: cover image with rounded left corners."""
+    return ImagePanel()
 
 
 def _hardware_vsep() -> QFrame:
@@ -252,19 +327,19 @@ AUTH_SHELL_QSS = """
             }
             QFrame#loginShellCard {
                 background-color: #ffffff;
-                border-radius: 20px;
+                border-radius: 24px;
                 border: 1px solid #1e293b;
             }
             QFrame#loginBrandPanel {
                 background-color: #0a1630;
-                border-top-left-radius: 20px;
-                border-bottom-left-radius: 20px;
+                border-top-left-radius: 24px;
+                border-bottom-left-radius: 24px;
                 border-right: 1px solid rgba(255,255,255,0.08);
             }
             QLabel#loginHeroImage {
                 background-color: #0a1630;
-                border-top-left-radius: 20px;
-                border-bottom-left-radius: 20px;
+                border-top-left-radius: 24px;
+                border-bottom-left-radius: 24px;
             }
             QLabel#loginBrandSubtitle {
                 color: rgba(255,255,255,0.88);
@@ -279,8 +354,8 @@ AUTH_SHELL_QSS = """
             }
             QFrame#loginFormPanel {
                 background-color: #ffffff;
-                border-top-right-radius: 20px;
-                border-bottom-right-radius: 20px;
+                border-top-right-radius: 24px;
+                border-bottom-right-radius: 24px;
             }
             QWidget#loginFormBlock {
                 background-color: #ffffff;
@@ -288,7 +363,7 @@ AUTH_SHELL_QSS = """
             QFrame#loginHardwareStrip {
                 background-color: #ffffff;
                 border-top: 1px solid #e2e8f0;
-                border-bottom-right-radius: 20px;
+                border-bottom-right-radius: 24px;
             }
             QLabel#loginHardwareTitle {
                 color: #0f172a;
@@ -455,8 +530,7 @@ class LoginWindow(QWidget):
         outer.setContentsMargins(MARGIN_X, MARGIN_Y, MARGIN_X, MARGIN_Y)
         outer.setSpacing(0)
 
-        card = QFrame()
-        card.setObjectName("loginShellCard")
+        card = LoginSplitContainer()
         card.setFixedSize(CARD_W, CARD_H)
         card_row = QHBoxLayout()
         card_row.addStretch(1)
@@ -468,12 +542,11 @@ class LoginWindow(QWidget):
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
 
-        shell.addWidget(brand_hero_left_panel())
+        left_panel = brand_hero_left_panel()
+        shell.addWidget(left_panel, 1)
 
         # —— Right: white form column + hardware status strip (reference layout) ——
-        right = QFrame()
-        right.setObjectName("loginFormPanel")
-        right.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        right = LoginFormPanel()
         outer_rv = QVBoxLayout(right)
         outer_rv.setContentsMargins(0, 0, 0, 0)
         outer_rv.setSpacing(0)
@@ -482,7 +555,7 @@ class LoginWindow(QWidget):
         form_block.setObjectName("loginFormBlock")
         form_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         rv = QVBoxLayout(form_block)
-        rv.setContentsMargins(45, 45, 41, 33)
+        rv.setContentsMargins(52, 52, 52, 38)
         rv.setSpacing(19)
 
         welcome = QLabel("Welcome to ZIMON")
@@ -537,6 +610,8 @@ class LoginWindow(QWidget):
         outer_rv.addWidget(login_hardware_status_strip(), 0)
 
         shell.addWidget(right, 1)
+        shell.setStretch(0, 1)
+        shell.setStretch(1, 1)
 
         self.setStyleSheet(AUTH_SHELL_QSS)
 
@@ -636,8 +711,7 @@ class ForgotPasswordWindow(QWidget):
         outer.setContentsMargins(MARGIN_X, MARGIN_Y, MARGIN_X, MARGIN_Y)
         outer.setSpacing(0)
 
-        card = QFrame()
-        card.setObjectName("loginShellCard")
+        card = LoginSplitContainer()
         card.setFixedSize(CARD_W, CARD_H)
         card_row = QHBoxLayout()
         card_row.addStretch(1)
@@ -649,11 +723,10 @@ class ForgotPasswordWindow(QWidget):
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
 
-        shell.addWidget(brand_hero_left_panel())
+        left_panel = brand_hero_left_panel()
+        shell.addWidget(left_panel, 1)
 
-        right = QFrame()
-        right.setObjectName("loginFormPanel")
-        right.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        right = LoginFormPanel()
         outer_rv = QVBoxLayout(right)
         outer_rv.setContentsMargins(0, 0, 0, 0)
         outer_rv.setSpacing(0)
@@ -663,7 +736,7 @@ class ForgotPasswordWindow(QWidget):
         form_block.setObjectName("loginFormBlock")
         form_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         rv = QVBoxLayout(form_block)
-        rv.setContentsMargins(45, 45, 41, 33)
+        rv.setContentsMargins(52, 52, 52, 38)
         rv.setSpacing(19)
 
         title = QLabel("Reset your password")
@@ -707,6 +780,8 @@ class ForgotPasswordWindow(QWidget):
         outer_rv.addStretch(1)
 
         shell.addWidget(right, 1)
+        shell.setStretch(0, 1)
+        shell.setStretch(1, 1)
 
         self.setStyleSheet(AUTH_SHELL_QSS)
 

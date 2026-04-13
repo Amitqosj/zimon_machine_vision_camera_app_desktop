@@ -1,235 +1,404 @@
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QGroupBox, QMessageBox, QFileDialog, QLineEdit
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QComboBox,
+    QMessageBox,
+    QFileDialog,
+    QLineEdit,
+    QWidget,
+    QFrame,
+    QScrollArea,
+    QSizePolicy,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDateTime, QTimer, pyqtSignal
 import serial.tools.list_ports
 import logging
 import os
 
 
+class SettingsCard(QFrame):
+    """Reusable dark neon settings card with floating section label."""
+
+    def __init__(self, section_label: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SettingsCard")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 22, 20, 18)
+        root.setSpacing(12)
+        cap_row = QHBoxLayout()
+        cap_row.setContentsMargins(0, 0, 0, 0)
+        self._cap = QLabel(section_label.upper())
+        self._cap.setObjectName("CardCaption")
+        cap_row.addWidget(self._cap, 0, Qt.AlignmentFlag.AlignLeft)
+        cap_row.addStretch(1)
+        root.addLayout(cap_row)
+        self.body = QVBoxLayout()
+        self.body.setContentsMargins(0, 0, 0, 0)
+        self.body.setSpacing(12)
+        root.addLayout(self.body)
+
+
+class ArduinoSettingsCard(SettingsCard):
+    def __init__(self, parent=None) -> None:
+        super().__init__("Arduino Settings", parent)
+
+
+class ZebraZoomSettingsCard(SettingsCard):
+    def __init__(self, parent=None) -> None:
+        super().__init__("ZebraZoom Settings", parent)
+
+
+class StatusFooter(QFrame):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("SettingsFooter")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(14, 8, 14, 8)
+        lay.setSpacing(16)
+        self.left = QLabel(
+            "System: Disconnected   |   Camera: Idle   |   Chamber: Idle   |   Temperature: —   |   Water flow: —"
+        )
+        self.left.setObjectName("FooterLeft")
+        self.left.setWordWrap(True)
+        self.right = QLabel("")
+        self.right.setObjectName("FooterRight")
+        lay.addWidget(self.left, 1)
+        lay.addWidget(self.right, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+
 class SettingsDialog(QDialog):
+    back_to_home_requested = pyqtSignal()
+
     def __init__(self, arduino_controller, parent=None, zebrazoom_integration=None):
+        # Compatibility:
+        # - SettingsDialog(self) from ui/main_window.py
+        # - SettingsDialog(self.arduino, self, self.zebrazoom) from gui/main_window.py
+        if parent is None and arduino_controller is not None and not hasattr(arduino_controller, "connect"):
+            parent = arduino_controller
+            arduino_controller = getattr(parent, "arduino", None)
+            zebrazoom_integration = getattr(parent, "zebrazoom", zebrazoom_integration)
+
         super().__init__(parent)
         self.arduino = arduino_controller
         self.zebrazoom = zebrazoom_integration
         self.logger = logging.getLogger("settings_dialog")
-        
+
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(550)
-        self.setMinimumHeight(450)
-        
-        # Apply dark theme styling
+        self.resize(980, 700)
+        self.setMinimumSize(860, 560)
+
         self.setStyleSheet("""
             QDialog {
-                background-color: #0a0b0f;
-                color: #e8e9ea;
+                background-color: #06111F;
+                color: #FFFFFF;
+                font-family: "Segoe UI", "Inter", "Poppins", sans-serif;
             }
-            QGroupBox {
-                border: 1px solid #2a2d36;
-                background: #14161a;
-                border-radius: 12px;
-                padding: 16px;
-                margin-top: 8px;
-                font-weight: 600;
+            QWidget#SettingsRoot {
+                background: #06111F;
+            }
+            QFrame#HeaderWrap {
+                background: transparent;
+            }
+            QLabel#HeaderTitle {
+                color: #FFFFFF;
+                font-size: 28px;
+                font-weight: 800;
+            }
+            QLabel#HeaderSub {
+                color: #94A3B8;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QPushButton#BackHomeBtn {
+                background: transparent;
+                border: 1px solid transparent;
+                color: #9CC7E8;
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: 700;
+            }
+            QPushButton#BackHomeBtn:hover {
+                background: rgba(0, 200, 255, 0.08);
+                border: 1px solid #15324D;
+            }
+            QFrame#SettingsCard {
+                background: #0D1420;
+                border: 1px solid #15324D;
+                border-radius: 14px;
+            }
+            QLabel#CardCaption {
+                color: #9CC7E8;
+                font-size: 12px;
+                font-weight: 800;
+                letter-spacing: 1.2px;
+                background: #0D1420;
+                padding: 2px 8px;
+            }
+            QLabel#RowLabel {
+                color: #FFFFFF;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QLabel#Muted {
+                color: #94A3B8;
+                font-size: 11px;
+            }
+            QLabel#Danger {
+                color: #FF5D73;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QLabel#Success {
+                color: #22C55E;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QLabel#Warning {
+                color: #FACC15;
+                font-size: 14px;
+                font-weight: 700;
+            }
+            QFrame#Divider {
+                background: #15324D;
+                min-height: 1px;
+                max-height: 1px;
+                border: none;
+            }
+            QLineEdit, QComboBox {
+                background: #0B1B2C;
+                border: 1px solid #15324D;
+                border-radius: 10px;
+                color: #FFFFFF;
+                min-height: 40px;
+                padding: 0 12px;
                 font-size: 13px;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                subcontrol-position: top left;
-                left: 18px;
-                padding: 0 8px;
-                color: #b8bcc8;
-                background-color: #14161a;
-            }
-            QLabel {
-                color: #e8e9ea;
-            }
-            QComboBox {
-                background: #1a1c21;
-                border: 1px solid #2a2d36;
-                border-radius: 6px;
-                padding: 6px 10px;
-                color: #e8e9ea;
-                min-height: 28px;
-            }
-            QComboBox:hover {
-                border-color: #3a3d46;
-            }
-            QComboBox:focus {
-                border-color: #6366f1;
+            QLineEdit:focus, QComboBox:focus {
+                border: 1px solid #00C8FF;
             }
             QComboBox::drop-down {
+                width: 24px;
                 border: none;
-                width: 20px;
             }
             QComboBox::down-arrow {
                 image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 5px solid #b8bcc8;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #9CC7E8;
+                margin-right: 6px;
             }
             QPushButton {
-                background: #6366f1;
-                color: #ffffff;
-                border: none;
-                border-radius: 8px;
-                padding: 10px 24px;
-                font-weight: 500;
-                min-height: 36px;
+                border-radius: 10px;
+                min-height: 40px;
+                padding: 0 16px;
+                font-size: 13px;
+                font-weight: 700;
             }
-            QPushButton:hover {
-                background: #818cf8;
+            QPushButton#PrimaryBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #5B5CFF, stop:1 #007BFF);
+                color: #FFFFFF;
+                border: 1px solid rgba(110, 165, 255, 0.75);
             }
-            QPushButton:pressed {
-                background: #4f46e5;
+            QPushButton#PrimaryBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6E70FF, stop:1 #1E8EFF);
             }
-            QPushButton:disabled {
-                background: #2a2d36;
-                color: #7a7d85;
+            QPushButton#SecondaryBtn {
+                background: #0B1B2C;
+                color: #E7F2FF;
+                border: 1px solid #15324D;
             }
-            QLineEdit {
-                background: #1a1c21;
-                border: 1px solid #2a2d36;
-                border-radius: 6px;
-                padding: 6px 10px;
-                color: #e8e9ea;
-                min-height: 28px;
+            QPushButton#SecondaryBtn:hover {
+                border: 1px solid #00C8FF;
+                background: rgba(0, 200, 255, 0.08);
             }
-            QLineEdit:hover {
-                border-color: #3a3d46;
+            QPushButton#DangerBtn {
+                background: #111824;
+                color: #FFCDD4;
+                border: 1px solid #7A2A38;
             }
-            QLineEdit:focus {
-                border-color: #6366f1;
-                background: #24262c;
+            QPushButton#DangerBtn:hover {
+                border: 1px solid #FF5D73;
+                background: rgba(255, 93, 115, 0.10);
             }
-            QLineEdit:disabled {
-                background: #16181c;
-                border-color: #16181c;
-                color: #7a7d85;
+            QFrame#SettingsFooter {
+                background: #071426;
+                border-top: 1px solid #15324D;
+            }
+            QLabel#FooterLeft, QLabel#FooterRight {
+                color: #94A3B8;
+                font-size: 11px;
             }
         """)
-        
+
         self._build_ui()
         self._refresh_ports()
-        
+
     def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(16)
-        layout.setContentsMargins(20, 20, 20, 20)
-        
-        # Arduino Settings Group
-        arduino_group = QGroupBox("Arduino Settings")
-        arduino_layout = QVBoxLayout(arduino_group)
-        arduino_layout.setSpacing(12)
-        arduino_layout.setContentsMargins(16, 20, 16, 16)
-        
-        # Connection Status
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        body = QWidget()
+        body.setObjectName("SettingsRoot")
+        root.addWidget(body, 1)
+        b = QVBoxLayout(body)
+        b.setContentsMargins(12, 12, 12, 8)
+        b.setSpacing(12)
+
+        header = QFrame()
+        header.setObjectName("HeaderWrap")
+        hh = QHBoxLayout(header)
+        hh.setContentsMargins(0, 0, 0, 0)
+        hleft = QVBoxLayout()
+        hleft.setSpacing(2)
+        title = QLabel("Settings")
+        title.setObjectName("HeaderTitle")
+        subtitle = QLabel(
+            "Arduino serial link and ZebraZoom executable — same layout as desktop app."
+        )
+        subtitle.setObjectName("HeaderSub")
+        subtitle.setWordWrap(True)
+        hleft.addWidget(title)
+        hleft.addWidget(subtitle)
+        hh.addLayout(hleft, 1)
+        self._btn_back_home = QPushButton("Back to Home")
+        self._btn_back_home.setObjectName("BackHomeBtn")
+        self._btn_back_home.clicked.connect(self._on_back_to_home)
+        hh.addWidget(self._btn_back_home, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        b.addWidget(header)
+
+        sc = QScrollArea()
+        sc.setWidgetResizable(True)
+        sc.setFrameShape(QFrame.Shape.NoFrame)
+        sc.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sc.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        sc.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        wrap = QWidget()
+        wl = QVBoxLayout(wrap)
+        wl.setContentsMargins(0, 0, 0, 0)
+        wl.setSpacing(18)
+        container = QWidget()
+        container.setMaximumWidth(980)
+        cl = QVBoxLayout(container)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(18)
+
+        # Arduino Settings Card
+        arduino_card = ArduinoSettingsCard()
+        arduino_layout = arduino_card.body
+
         status_layout = QHBoxLayout()
         status_layout.setSpacing(10)
-        
-        status_label = QLabel("Connection Status:")
+        status_label = QLabel("Connection status:")
+        status_label.setObjectName("RowLabel")
         status_label.setMinimumWidth(120)
         self.status_value = QLabel("Checking...")
-        self.status_value.setStyleSheet("font-weight: 600;")
+        self.status_value.setObjectName("Warning")
         status_layout.addWidget(status_label)
         status_layout.addWidget(self.status_value)
         status_layout.addStretch()
-        
         arduino_layout.addLayout(status_layout)
-        
-        # Port Selection
+
         port_layout = QHBoxLayout()
         port_layout.setSpacing(10)
-        
-        port_label = QLabel("Serial Port:")
+        port_label = QLabel("Serial port:")
+        port_label.setObjectName("RowLabel")
         port_label.setMinimumWidth(120)
         self.port_combo = QComboBox()
-        self.port_combo.setMinimumWidth(200)
+        self.port_combo.setMinimumWidth(220)
         self.port_combo.setEditable(False)
-        
         refresh_btn = QPushButton("Refresh")
+        refresh_btn.setObjectName("SecondaryBtn")
         refresh_btn.setMinimumWidth(80)
         refresh_btn.clicked.connect(self._refresh_ports)
-        
         port_layout.addWidget(port_label)
         port_layout.addWidget(self.port_combo, 1)
         port_layout.addWidget(refresh_btn)
-        
         arduino_layout.addLayout(port_layout)
-        
-        # Connection Buttons
+
+        div1 = QFrame()
+        div1.setObjectName("Divider")
+        arduino_layout.addWidget(div1)
+
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
-        
+
         self.connect_btn = QPushButton("Connect")
-        self.connect_btn.setMinimumWidth(100)
+        self.connect_btn.setObjectName("PrimaryBtn")
+        self.connect_btn.setMinimumWidth(96)
         self.connect_btn.clicked.connect(self._connect_arduino)
-        
+
+        self.auto_connect_btn = QPushButton("Auto-connect")
+        self.auto_connect_btn.setObjectName("SecondaryBtn")
+        self.auto_connect_btn.setMinimumWidth(110)
+        self.auto_connect_btn.clicked.connect(self._connect_arduino)
+
         self.disconnect_btn = QPushButton("Disconnect")
-        self.disconnect_btn.setMinimumWidth(100)
+        self.disconnect_btn.setObjectName("DangerBtn")
+        self.disconnect_btn.setMinimumWidth(96)
         self.disconnect_btn.clicked.connect(self._disconnect_arduino)
         self.disconnect_btn.setEnabled(False)
-        
-        self.test_btn = QPushButton("Test Connection")
+
+        self.test_btn = QPushButton("Test connection")
+        self.test_btn.setObjectName("SecondaryBtn")
         self.test_btn.setMinimumWidth(120)
         self.test_btn.clicked.connect(self._test_connection)
-        
+
         button_layout.addWidget(self.connect_btn)
+        button_layout.addWidget(self.auto_connect_btn)
         button_layout.addWidget(self.disconnect_btn)
         button_layout.addStretch()
         button_layout.addWidget(self.test_btn)
-        
         arduino_layout.addLayout(button_layout)
-        
-        # Current Port Info
+
         info_layout = QHBoxLayout()
-        info_label = QLabel("Current Port:")
+        info_label = QLabel("Current port:")
+        info_label.setObjectName("RowLabel")
         info_label.setMinimumWidth(120)
         self.current_port_label = QLabel("None")
-        self.current_port_label.setStyleSheet("color: #9aa0aa;")
+        self.current_port_label.setObjectName("Muted")
         info_layout.addWidget(info_label)
         info_layout.addWidget(self.current_port_label)
         info_layout.addStretch()
-        
         arduino_layout.addLayout(info_layout)
-        
-        layout.addWidget(arduino_group)
-        
-        # ZebraZoom Settings Group - Always show
-        zebrazoom_group = QGroupBox("ZebraZoom Settings")
-        zz_layout = QVBoxLayout(zebrazoom_group)
-        zz_layout.setContentsMargins(16, 20, 16, 16)
-        zz_layout.setSpacing(12)
-        
-        # Info label
-        info_label = QLabel("Specify the path to ZebraZoom.exe file (not the folder)")
-        info_label.setStyleSheet("color: #9aa0aa; font-size: 11px; padding-bottom: 8px;")
+
+        cl.addWidget(arduino_card)
+
+        # ZebraZoom Settings Card
+        zebrazoom_card = ZebraZoomSettingsCard()
+        zz_layout = zebrazoom_card.body
+
+        info_label = QLabel(
+            "Specify the path to ZebraZoom.exe (the file, not the folder) — used by Analysis."
+        )
+        info_label.setObjectName("Muted")
         info_label.setWordWrap(True)
         zz_layout.addWidget(info_label)
-        
-        # Status
+
         zz_status_layout = QHBoxLayout()
         zz_status_layout.setSpacing(10)
-        
         zz_status_label = QLabel("Status:")
+        zz_status_label.setObjectName("RowLabel")
         zz_status_label.setMinimumWidth(120)
         self.zz_status_value = QLabel("Checking...")
-        self.zz_status_value.setStyleSheet("font-weight: 600;")
+        self.zz_status_value.setObjectName("Warning")
         zz_status_layout.addWidget(zz_status_label)
         zz_status_layout.addWidget(self.zz_status_value)
         zz_status_layout.addStretch()
         zz_layout.addLayout(zz_status_layout)
-        
-        # Path selection
+
         zz_path_layout = QHBoxLayout()
         zz_path_layout.setSpacing(10)
-        
         zz_path_label = QLabel("ZebraZoom.exe:")
+        zz_path_label.setObjectName("RowLabel")
         zz_path_label.setMinimumWidth(120)
         self.zz_path_edit = QLineEdit()
         self.zz_path_edit.setPlaceholderText("C:\\path\\to\\ZebraZoom.exe")
-        
+
         # Initialize path if zebrazoom exists
         if self.zebrazoom:
             if self.zebrazoom.zebrazoom_exe:
@@ -242,25 +411,56 @@ class SettingsDialog(QDialog):
                 default_path = r"C:\Users\{}\Downloads\ZebraZoom-Windows\ZebraZoom.exe".format(os.getenv("USERNAME", ""))
                 if os.path.exists(default_path):
                     self.zz_path_edit.setText(default_path)
-        
+
         zz_browse_btn = QPushButton("Browse")
+        zz_browse_btn.setObjectName("SecondaryBtn")
         zz_browse_btn.setMinimumWidth(80)
         zz_browse_btn.clicked.connect(self._browse_zebrazoom_path)
-        
         zz_path_layout.addWidget(zz_path_label)
         zz_path_layout.addWidget(self.zz_path_edit, 1)
         zz_path_layout.addWidget(zz_browse_btn)
-        
         zz_layout.addLayout(zz_path_layout)
-        
-        # Test button
-        zz_test_btn = QPushButton("Test & Save")
+
+        note = QLabel(
+            "Browse opens a file dialog on the machine running this app. "
+            "If it does not appear, paste the full ZebraZoom.exe path manually."
+        )
+        note.setObjectName("Muted")
+        note.setWordWrap(True)
+        zz_layout.addWidget(note)
+
+        div2 = QFrame()
+        div2.setObjectName("Divider")
+        zz_layout.addWidget(div2)
+
+        zz_btns = QHBoxLayout()
+        zz_btns.setSpacing(10)
+        self._zz_save_btn = QPushButton("Save path")
+        self._zz_save_btn.setObjectName("SecondaryBtn")
+        self._zz_save_btn.clicked.connect(lambda: self._test_zebrazoom(save_only=True))
+        zz_test_btn = QPushButton("Test & save")
+        zz_test_btn.setObjectName("PrimaryBtn")
         zz_test_btn.setMinimumWidth(120)
         zz_test_btn.clicked.connect(self._test_zebrazoom)
-        zz_layout.addWidget(zz_test_btn)
-        
-        layout.addWidget(zebrazoom_group)
-        
+        zz_btns.addWidget(self._zz_save_btn, 0)
+        zz_btns.addWidget(zz_test_btn, 0)
+        zz_btns.addStretch(1)
+        zz_layout.addLayout(zz_btns)
+
+        cl.addWidget(zebrazoom_card)
+        cl.addStretch(1)
+        center_row = QHBoxLayout()
+        center_row.setContentsMargins(0, 0, 0, 0)
+        center_row.addStretch(1)
+        center_row.addWidget(container, 0)
+        center_row.addStretch(1)
+        wl.addLayout(center_row)
+        sc.setWidget(wrap)
+        b.addWidget(sc, 1)
+
+        self._footer = StatusFooter()
+        b.addWidget(self._footer, 0)
+
         # Initialize ZebraZoom if not exists
         if not self.zebrazoom:
             try:
@@ -269,24 +469,26 @@ class SettingsDialog(QDialog):
             except Exception as e:
                 self.logger.warning(f"Could not initialize ZebraZoom: {e}")
                 self.zebrazoom = None
-        
+
         self._update_zebrazoom_status()
-        
-        layout.addStretch()
-        
-        # Dialog Buttons
-        dialog_buttons = QHBoxLayout()
-        dialog_buttons.addStretch()
-        
-        close_btn = QPushButton("Close")
-        close_btn.setMinimumWidth(100)
-        close_btn.clicked.connect(self.accept)
-        dialog_buttons.addWidget(close_btn)
-        
-        layout.addLayout(dialog_buttons)
-        
+
+        self._clock = QTimer(self)
+        self._clock.timeout.connect(self._tick_clock)
+        self._clock.start(1000)
+        self._tick_clock()
+
         # Update UI state
         self._update_ui_state()
+
+    def _tick_clock(self) -> None:
+        self._footer.right.setText(
+            QDateTime.currentDateTime().toString("h:mm AP MMM d, yyyy")
+        )
+
+    def _on_back_to_home(self) -> None:
+        self.back_to_home_requested.emit()
+        if self.isModal():
+            self.accept()
         
     def _refresh_ports(self):
         """Refresh the list of available serial ports"""
@@ -310,8 +512,11 @@ class SettingsDialog(QDialog):
         """Update UI based on connection state"""
         if not self.arduino:
             self.status_value.setText("Not Available")
-            self.status_value.setStyleSheet("color: #d04f4f; font-weight: 600;")
+            self.status_value.setObjectName("Danger")
+            self.status_value.style().unpolish(self.status_value)
+            self.status_value.style().polish(self.status_value)
             self.connect_btn.setEnabled(False)
+            self.auto_connect_btn.setEnabled(False)
             self.disconnect_btn.setEnabled(False)
             self.current_port_label.setText("None")
             return
@@ -321,14 +526,20 @@ class SettingsDialog(QDialog):
         if is_connected:
             port = getattr(self.arduino, 'port', 'Unknown')
             self.status_value.setText("Connected")
-            self.status_value.setStyleSheet("color: #4fc3f7; font-weight: 600;")
+            self.status_value.setObjectName("Success")
+            self.status_value.style().unpolish(self.status_value)
+            self.status_value.style().polish(self.status_value)
             self.connect_btn.setEnabled(False)
+            self.auto_connect_btn.setEnabled(False)
             self.disconnect_btn.setEnabled(True)
             self.current_port_label.setText(port)
         else:
             self.status_value.setText("Disconnected")
-            self.status_value.setStyleSheet("color: #d04f4f; font-weight: 600;")
+            self.status_value.setObjectName("Danger")
+            self.status_value.style().unpolish(self.status_value)
+            self.status_value.style().polish(self.status_value)
             self.connect_btn.setEnabled(True)
+            self.auto_connect_btn.setEnabled(True)
             self.disconnect_btn.setEnabled(False)
             self.current_port_label.setText("None")
             
@@ -345,7 +556,9 @@ class SettingsDialog(QDialog):
             
         try:
             self.status_value.setText("Connecting...")
-            self.status_value.setStyleSheet("color: #f5c542; font-weight: 600;")
+            self.status_value.setObjectName("Warning")
+            self.status_value.style().unpolish(self.status_value)
+            self.status_value.style().polish(self.status_value)
             self.connect_btn.setEnabled(False)
             
             if self.arduino.connect(selected_port):
@@ -437,7 +650,7 @@ class SettingsDialog(QDialog):
             
             self._update_zebrazoom_status()
     
-    def _test_zebrazoom(self):
+    def _test_zebrazoom(self, save_only: bool = False):
         """Test ZebraZoom connection and save path"""
         # Get path from text field
         path = self.zz_path_edit.text().strip()
@@ -509,7 +722,7 @@ class SettingsDialog(QDialog):
                 except ImportError:
                     missing_deps.append("h5py")
                 
-                if missing_deps:
+                if missing_deps and not save_only:
                     import sys
                     dep_list = ", ".join(missing_deps)
                     python_exe = sys.executable
@@ -532,7 +745,7 @@ class SettingsDialog(QDialog):
                     )
                     msg.setStandardButtons(QMessageBox.StandardButton.Ok)
                     msg.exec()
-                else:
+                elif not save_only:
                     QMessageBox.information(
                         self,
                         "Success",
@@ -549,7 +762,7 @@ class SettingsDialog(QDialog):
                     # Update analysis tab if it exists
                     if hasattr(self.parent(), '_update_zebrazoom_in_analysis'):
                         self.parent()._update_zebrazoom_in_analysis()
-            else:
+            elif not save_only:
                 QMessageBox.warning(
                     self,
                     "Not Available",
@@ -575,13 +788,19 @@ class SettingsDialog(QDialog):
         if self.zebrazoom.is_available():
             if self.zebrazoom.zebrazoom_exe:
                 self.zz_status_value.setText("Available (Executable)")
-                self.zz_status_value.setStyleSheet("color: #4fc3f7; font-weight: 600;")
+                self.zz_status_value.setObjectName("Success")
+                self.zz_status_value.style().unpolish(self.zz_status_value)
+                self.zz_status_value.style().polish(self.zz_status_value)
             elif self.zebrazoom.zebrazoom_lib:
                 self.zz_status_value.setText("Available (Library)")
-                self.zz_status_value.setStyleSheet("color: #4fc3f7; font-weight: 600;")
+                self.zz_status_value.setObjectName("Success")
+                self.zz_status_value.style().unpolish(self.zz_status_value)
+                self.zz_status_value.style().polish(self.zz_status_value)
         else:
             self.zz_status_value.setText("Not Available")
-            self.zz_status_value.setStyleSheet("color: #d04f4f; font-weight: 600;")
+            self.zz_status_value.setObjectName("Warning")
+            self.zz_status_value.style().unpolish(self.zz_status_value)
+            self.zz_status_value.style().polish(self.zz_status_value)
     
     def showEvent(self, event):
         """Update UI when dialog is shown"""

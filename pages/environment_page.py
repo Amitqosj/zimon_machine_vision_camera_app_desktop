@@ -32,8 +32,6 @@ class EnvironmentPage(QWidget):
         self._cam_chips: list[StatusChip] = []
         self._cam_subs: list[QLabel] = []
         self._stim_chips: dict[str, StatusChip] = {}
-        self._warn_main: QLabel | None = None
-        self._warn_meta: QLabel | None = None
         self._build()
         self._hw.devices_changed.connect(self._sync)
         self._hw.log_message.connect(self._append_log)
@@ -151,33 +149,6 @@ class EnvironmentPage(QWidget):
         split.setStretchFactor(1, 1)
         split.setSizes([520, 520])
         root.addWidget(split, 1)
-
-        warn = QFrame()
-        warn.setObjectName("ZEnvBanner")
-        warn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
-        wl = QHBoxLayout(warn)
-        wl.setContentsMargins(14, 10, 14, 10)
-        wl.setSpacing(14)
-        wcol = QVBoxLayout()
-        wcol.setSpacing(6)
-        self._warn_main = QLabel()
-        self._warn_main.setWordWrap(True)
-        self._warn_main.setStyleSheet("color:#ffd79a; font-weight:700; font-size:12px;")
-        self._warn_meta = QLabel()
-        self._warn_meta.setWordWrap(True)
-        self._warn_meta.setStyleSheet("color:#647a9a; font-weight:600; font-size:11px;")
-        wcol.addWidget(self._warn_main)
-        wcol.addWidget(self._warn_meta)
-        wl.addLayout(wcol, 1)
-        self._btn_diag = QPushButton("Run full diagnostic")
-        self._btn_diag.setObjectName("ZBtnAzure")
-        self._btn_diag.setIcon(icon(ICONS["camera"], "#041018", 18))
-        self._btn_diag.setMinimumHeight(40)
-        self._btn_diag.setMinimumWidth(180)
-        self._btn_diag.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_diag.clicked.connect(self._run_diag)
-        wl.addWidget(self._btn_diag, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-        root.addWidget(warn)
 
         foot = QHBoxLayout()
         foot.setSpacing(12)
@@ -344,9 +315,6 @@ class EnvironmentPage(QWidget):
     def _append_log(self, msg: str) -> None:
         self._log.appendPlainText(f"[{datetime.now():%H:%M:%S}] {msg}")
 
-    def _run_diag(self) -> None:
-        self._hw.run_full_diagnostic()
-
     @staticmethod
     def _device_ok(st: DeviceStatus | None) -> bool:
         if st is None:
@@ -402,22 +370,3 @@ class EnvironmentPage(QWidget):
             chip.set_text(text)
             chip.set_tone(tone)
 
-        lt = self._hw.get("light")
-        arduino_off = not self._device_ok(lt.status if lt else None)
-        no_cam = not cam_ok
-        parts: list[str] = []
-        if arduino_off:
-            parts.append(
-                "Arduino disconnected — connect serial in Settings."
-            )
-        if no_cam:
-            parts.append("No cameras detected — check USB / API camera stack.")
-        if not parts and not ready:
-            parts.append("One or more subsystems need attention.")
-        if self._warn_main and self._warn_meta:
-            self._warn_main.setText(" ".join(parts) if parts else "All monitored channels nominal.")
-            self._warn_meta.setText(
-                "Temperature: —  Recordings API: unavailable"
-                if not ready
-                else "Temperature: —  Recordings API: reachable (simulated)."
-            )

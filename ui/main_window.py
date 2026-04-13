@@ -33,7 +33,9 @@ from pages.environment_page import EnvironmentPage
 from pages.experiments_page import ExperimentsPage
 from pages.larval_page import LarvalPage
 from pages.protocol_builder_page import ProtocolBuilderPage
+from pages.user_screen import UserScreen
 from ui.navbar import NavBar
+from gui.settings_dialog import SettingsDialog
 from widgets.toast_manager import ToastManager, normalize_message
 
 
@@ -60,8 +62,8 @@ class ZimonMainWindow(QMainWindow):
 
         self._camera_worker: CameraWorker | None = None
         self._nav_screen = "Adult"
-        self._accent_alt = False
         self._last_validation_sig = ""
+        self._last_hardware_warning_sig = ""
 
         self.resize(1440, 900)
         self.setMinimumSize(1100, 720)
@@ -109,16 +111,6 @@ class ZimonMainWindow(QMainWindow):
             self._base_qss = f.read()
         self.setStyleSheet(self._base_qss)
 
-    def _toggle_accent_theme(self) -> None:
-        self._accent_alt = not self._accent_alt
-        qss = self._base_qss
-        if self._accent_alt:
-            qss = qss.replace("#1ea7ff", "#00e5ff").replace("#050b18", "#060d1a").replace(
-                "#0b1324", "#0c1528"
-            )
-        self.setStyleSheet(qss)
-        self._navbar.set_theme_icon_sun(not self._accent_alt)
-
     def _build_menu_toolbar(self) -> None:
         """Shell uses in-app NavBar only — no OS menu strip or extra toolbars above it."""
         mb = self.menuBar()
@@ -136,9 +128,8 @@ class ZimonMainWindow(QMainWindow):
         self._navbar = NavBar(self.user_data)
         self._navbar.page_changed.connect(self._on_nav_page)
         self._navbar.check_environment_clicked.connect(self._go_environment)
-        self._navbar.theme_toggle_clicked.connect(self._toggle_accent_theme)
         self._navbar.settings_clicked.connect(self._open_settings)
-        self._navbar.help_clicked.connect(self._about)
+        self._navbar.profile_clicked.connect(self._open_user_screen)
         prof_menu = QMenu(self)
         prof_menu.addAction("About…", self._about)
         prof_menu.addSeparator()
@@ -160,12 +151,18 @@ class ZimonMainWindow(QMainWindow):
         self._page_env = EnvironmentPage(self._hardware)
         self._page_protocol = ProtocolBuilderPage(self._protocols)
         self._page_experiments = ExperimentsPage()
+        self._page_settings = SettingsDialog(self)
+        self._page_user_screen = UserScreen(self.user_data)
+        self._page_user_screen.logout_requested.connect(self._logout_without_prompt)
+        self._page_settings.back_to_home_requested.connect(self._go_adult)
         for page in (
             self._page_adult,
             self._page_larval,
             self._page_env,
             self._page_protocol,
             self._page_experiments,
+            self._page_settings,
+            self._page_user_screen,
         ):
             page.setSizePolicy(
                 QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
@@ -176,6 +173,8 @@ class ZimonMainWindow(QMainWindow):
         self._stack.addWidget(self._page_env)
         self._stack.addWidget(self._page_protocol)
         self._stack.addWidget(self._page_experiments)
+        self._stack.addWidget(self._page_settings)
+        self._stack.addWidget(self._page_user_screen)
 
         lay.addWidget(self._stack, 1)
         self.setCentralWidget(wrap)
@@ -188,12 +187,19 @@ class ZimonMainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         try:
-            from gui.settings_dialog import SettingsDialog
-
-            dlg = SettingsDialog(self)
-            dlg.exec()
+            self._stack.setCurrentWidget(self._page_settings)
+            self._nav_screen = "Settings"
+            self._sync_nav()
         except Exception as e:
             QMessageBox.warning(self, "Settings", normalize_message(str(e)))
+
+    def _open_user_screen(self) -> None:
+        try:
+            self._stack.setCurrentWidget(self._page_user_screen)
+            self._nav_screen = "User Account"
+            self._sync_nav()
+        except Exception as e:
+            QMessageBox.warning(self, "User Account", normalize_message(str(e)))
 
     def _go_adult(self) -> None:
         self._navbar.set_active_index(0)
@@ -339,17 +345,29 @@ class ZimonMainWindow(QMainWindow):
     def _sync_status_ready(self) -> None:
         ok = self._hardware.system_ready()
         self._st_ready.setText(f"System ready: {'YES' if ok else 'NO'}")
+        hardware_warnings: list[str] = []
         if self.arduino and self.arduino.is_connected():
             self._st_conn.setText("Arduino: connected")
         elif self.arduino:
             self._st_conn.setText("Arduino: disconnected")
+            hardware_warnings.append("Arduino not connected")
         else:
             self._st_conn.setText("Arduino: not configured")
+            hardware_warnings.append("Arduino not configured")
         cams = self._camera_names_fn()
         if cams:
             self._st_conn.setText(f"{self._st_conn.text()}  |  Cameras: {len(cams)}")
+        else:
+            hardware_warnings.append("No cameras detected")
         if self.runner and hasattr(self.runner, "is_running") and self.runner.is_running():
             self._lbl_active.setText(f"Module: {self._nav_screen}  |  Chamber: recording")
+        if hardware_warnings:
+            sig = "|".join(hardware_warnings)
+            if sig != self._last_hardware_warning_sig:
+                self._last_hardware_warning_sig = sig
+                self._toast.show("; ".join(hardware_warnings), "warning")
+        else:
+            self._last_hardware_warning_sig = ""
 
     def _start_camera_worker_stub(self) -> None:
         if self._camera_worker and self._camera_worker.isRunning():
@@ -379,6 +397,12 @@ class ZimonMainWindow(QMainWindow):
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
+        self._perform_logout()
+
+    def _logout_without_prompt(self) -> None:
+        self._perform_logout()
+
+    def _perform_logout(self) -> None:
         clear_active_session()
         self._login = LoginWindow()
         self._login.login_success.connect(self._on_relogin)
