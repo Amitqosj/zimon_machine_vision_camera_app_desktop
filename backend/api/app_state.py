@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from backend.arduino_controller import ArduinoController
     from backend.experiment_runner import ExperimentRunner
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _arduino: Optional["ArduinoController"] = None
 _runner: Optional["ExperimentRunner"] = None
 

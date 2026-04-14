@@ -152,6 +152,23 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)
         """
     )
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS notification_reads (
+            notification_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (notification_id, user_id),
+            FOREIGN KEY(notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_notification_reads_user_id ON notification_reads(user_id)
+        """
+    )
 
     conn.commit()
     conn.close()

@@ -30,6 +30,14 @@ CARD_H = int(WINDOW_H * 0.88)
 MARGIN_X = (WINDOW_W - CARD_W) // 2
 MARGIN_Y = (WINDOW_H - CARD_H) // 2
 
+# Slightly smaller layout for forgot-password screen
+FORGOT_WINDOW_W = 1040
+FORGOT_WINDOW_H = 680
+FORGOT_CARD_W = int(FORGOT_WINDOW_W * 0.90)
+FORGOT_CARD_H = int(FORGOT_WINDOW_H * 0.88)
+FORGOT_MARGIN_X = (FORGOT_WINDOW_W - FORGOT_CARD_W) // 2
+FORGOT_MARGIN_Y = (FORGOT_WINDOW_H - FORGOT_CARD_H) // 2
+
 
 def _pixmap(path: Path, max_w: int, max_h: int) -> QPixmap | None:
     if not path.is_file():
@@ -701,18 +709,18 @@ class ForgotPasswordWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ZIMON — Reset password")
-        self.setFixedSize(WINDOW_W, WINDOW_H)
+        self.setFixedSize(FORGOT_WINDOW_W, FORGOT_WINDOW_H)
         self._build_ui()
 
     def _build_ui(self):
         self.setObjectName("loginRootOuter")
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(MARGIN_X, MARGIN_Y, MARGIN_X, MARGIN_Y)
+        outer.setContentsMargins(FORGOT_MARGIN_X, FORGOT_MARGIN_Y, FORGOT_MARGIN_X, FORGOT_MARGIN_Y)
         outer.setSpacing(0)
 
         card = LoginSplitContainer()
-        card.setFixedSize(CARD_W, CARD_H)
+        card.setFixedSize(FORGOT_CARD_W, FORGOT_CARD_H)
         card_row = QHBoxLayout()
         card_row.addStretch(1)
         card_row.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
@@ -724,13 +732,16 @@ class ForgotPasswordWindow(QWidget):
         shell.setSpacing(0)
 
         left_panel = brand_hero_left_panel()
+        left_panel.setMinimumWidth(FORGOT_CARD_W // 2)
+        left_panel.setMaximumWidth(FORGOT_CARD_W // 2)
         shell.addWidget(left_panel, 1)
 
         right = LoginFormPanel()
+        right.setMinimumWidth(FORGOT_CARD_W // 2)
+        right.setMaximumWidth(FORGOT_CARD_W // 2)
         outer_rv = QVBoxLayout(right)
         outer_rv.setContentsMargins(0, 0, 0, 0)
         outer_rv.setSpacing(0)
-        outer_rv.addStretch(1)
 
         form_block = QWidget()
         form_block.setObjectName("loginFormBlock")
@@ -776,8 +787,7 @@ class ForgotPasswordWindow(QWidget):
         self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         rv.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignCenter)
 
-        outer_rv.addWidget(form_block)
-        outer_rv.addStretch(1)
+        outer_rv.addWidget(form_block, 1)
 
         shell.addWidget(right, 1)
         shell.setStretch(0, 1)
@@ -796,7 +806,7 @@ class ForgotPasswordWindow(QWidget):
 
         QMessageBox.information(
             self,
-            "Reset link sent",
-            "If this email is registered, a password reset link will be sent.",
+            "Success",
+            "Email send Successfully",
         )
         self.back_to_login.emit()
