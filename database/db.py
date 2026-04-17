@@ -1,8 +1,26 @@
 import os
 import sqlite3
+from pathlib import Path
 
-_default_db = os.path.join(os.path.dirname(__file__), "zimon_app.db")
-DB_PATH = os.environ.get("ZIMON_DATABASE_PATH", _default_db)
+
+def get_app_data_dir() -> Path:
+    """Return writable app data directory for desktop/runtime builds."""
+    if os.name == "nt":
+        base = Path(
+            os.environ.get(
+                "LOCALAPPDATA",
+                Path.home() / "AppData" / "Local",
+            )
+        )
+    else:
+        base = Path.home() / ".local" / "share"
+    app_dir = base / "ZIMON"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir
+
+
+_default_db = get_app_data_dir() / "zimon_app.db"
+DB_PATH = os.environ.get("ZIMON_DATABASE_PATH", str(_default_db))
 
 
 def get_connection():
