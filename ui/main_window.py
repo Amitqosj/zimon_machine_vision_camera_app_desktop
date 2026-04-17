@@ -34,6 +34,8 @@ from pages.experiments_page import ExperimentsPage
 from pages.larval_page import LarvalPage
 from pages.protocol_builder_page import ProtocolBuilderPage
 from pages.user_screen import UserScreen
+from pages.admin_feedback_management import AdminFeedbackManagementDialog
+from ui.feedback_support_dialog import FeedbackSupportDialog
 from ui.navbar import NavBar
 from gui.settings_dialog import SettingsDialog
 from widgets.toast_manager import ToastManager, normalize_message
@@ -133,6 +135,10 @@ class ZimonMainWindow(QMainWindow):
         prof_menu = QMenu(self)
         prof_menu.addAction("About…", self._about)
         prof_menu.addSeparator()
+        self._act_feedback_management = prof_menu.addAction("Feedback Management…")
+        self._act_feedback_management.triggered.connect(self._open_feedback_management)
+        role = str(self.user_data.get("role", "")).strip().lower()
+        self._act_feedback_management.setVisible(role == "admin")
         self._act_status_bar = prof_menu.addAction("Status bar")
         self._act_status_bar.setCheckable(True)
         self._act_status_bar.setChecked(True)
@@ -331,13 +337,26 @@ class ZimonMainWindow(QMainWindow):
 
     def _build_status(self) -> None:
         sb = self.statusBar()
+        self._feedback_btn = QPushButton("Feedback & Support")
+        self._feedback_btn.setObjectName("ZStatusLinkButton")
+        self._feedback_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._feedback_btn.setToolTip("Submit feedback, support requests, or feature ideas")
+        self._feedback_btn.clicked.connect(self._open_feedback_support)
         self._st_conn = QLabel("Connection: initializing…")
         self._st_time = QLabel("")
         self._st_ready = QLabel("System ready: —")
         self._lbl_active = QLabel("Module: —")
-        for w in (self._st_conn, self._st_ready, self._lbl_active):
+        for w in (self._st_conn, self._st_ready, self._lbl_active, self._feedback_btn):
             sb.addWidget(w)
         sb.addPermanentWidget(self._st_time)
+
+    def _open_feedback_support(self) -> None:
+        dialog = FeedbackSupportDialog(self)
+        dialog.exec()
+
+    def _open_feedback_management(self) -> None:
+        dialog = AdminFeedbackManagementDialog(self)
+        dialog.exec()
 
     def _tick_clock(self) -> None:
         self._st_time.setText(QDateTime.currentDateTime().toString("ddd MMM d  hh:mm:ss AP"))

@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
+import secrets
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from urllib.parse import parse_qs, urlparse
 
+import requests
 from PyQt6.QtCore import Qt, QRect, QSettings, pyqtSignal
 from PyQt6.QtGui import QFont, QPainterPath, QPixmap, QRegion
 from PyQt6.QtWidgets import (
@@ -21,6 +28,19 @@ from PyQt6.QtWidgets import (
 from database.auth import verify_login_credentials, set_active_session
 
 _IMAGES_DIR = Path(__file__).resolve().parent / "images"
+
+# ---------------- Forgot-password integration placeholders ----------------
+# Replace these values in your environment before production use.
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
+SMTP_USERNAME = "thakuramitsingh165@gmail.com"
+SMTP_PASSWORD = "abbg ktau iifa rjxk"
+FROM_EMAIL = "thakuramitsingh165@gmail.com"
+
+# Reset link and password update endpoint placeholders.
+# You can keep custom scheme for desktop deep links or use your HTTPS domain.
+RESET_LINK_BASE = "myapp://reset-password"
+RESET_PASSWORD_API_ENDPOINT = "https://yourdomain.com/api/users/reset-password"
 
 # Large-screen layout (login + forgot password)
 WINDOW_W = 1200
@@ -77,6 +97,59 @@ def _hero_pixmap_cover(target_w: int, target_h: int) -> QPixmap | None:
     x = max(0, (scaled.width() - target_w) // 2)
     y = max(0, (scaled.height() - target_h) // 2)
     return scaled.copy(QRect(x, y, target_w, target_h))
+
+
+def _is_valid_email(email: str) -> bool:
+    return bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()))
+
+
+def _extract_token_from_link(link: str) -> str:
+    try:
+        parsed = urlparse(link.strip())
+        values = parse_qs(parsed.query)
+        token = values.get("token", [""])[0].strip()
+        return token
+    except Exception:
+        return ""
+
+
+def _build_reset_link(token: str) -> str:
+    base = RESET_LINK_BASE.rstrip("/")
+    if base.startswith("myapp://"):
+        return f"{base}?token={token}"
+    return f"{base}/reset-password?token={token}"
+
+
+def _send_password_reset_email(target_email: str, reset_link: str) -> None:
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "ZIMON Password Reset"
+    msg["From"] = FROM_EMAIL
+    msg["To"] = target_email
+
+    plain = (
+        "You requested a password reset for your ZIMON account.\n\n"
+        f"Open this link to continue:\n{reset_link}\n\n"
+        "If you did not request this, you can ignore this email."
+    )
+    html = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; color: #dbeafe; background: #0b1324;">
+        <p>You requested a password reset for your ZIMON account.</p>
+        <p>
+          <a href="{reset_link}" style="color: #38bdf8;">Reset your password</a>
+        </p>
+        <p>If you did not request this, you can ignore this email.</p>
+      </body>
+    </html>
+    """
+
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+        server.starttls()
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.sendmail(FROM_EMAIL, [target_email], msg.as_string())
 
 
 class ImagePanel(QFrame):
@@ -516,6 +589,7 @@ class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.forgot_password_window = None
+        self.reset_password_window = None
         self._pw_visible = False
         self._settings = QSettings("ZIMON", "DesktopLogin")
 
@@ -689,9 +763,34 @@ class LoginWindow(QWidget):
         if self.forgot_password_window is None:
             self.forgot_password_window = ForgotPasswordWindow()
             self.forgot_password_window.back_to_login.connect(self._back_from_forgot_password)
+            self.forgot_password_window.open_reset_link.connect(
+                self._open_reset_password_from_link
+            )
         self.forgot_password_window.showNormal()
         self.forgot_password_window.raise_()
         self.forgot_password_window.activateWindow()
+        self.hide()
+
+    def _open_reset_password_from_link(self, link: str):
+        token = _extract_token_from_link(link)
+        if not token:
+            QMessageBox.warning(
+                self,
+                "Invalid reset link",
+                "Could not read a token from the reset link.",
+            )
+            return
+        if self.reset_password_window is None:
+            self.reset_password_window = ResetPasswordWindow()
+            self.reset_password_window.back_to_login.connect(
+                self._back_from_reset_password
+            )
+        self.reset_password_window.set_token(token)
+        self.reset_password_window.showNormal()
+        self.reset_password_window.raise_()
+        self.reset_password_window.activateWindow()
+        if self.forgot_password_window is not None:
+            self.forgot_password_window.hide()
         self.hide()
 
     def _back_from_forgot_password(self):
@@ -702,111 +801,301 @@ class LoginWindow(QWidget):
         self.activateWindow()
         self.show()
 
+    def _back_from_reset_password(self):
+        if self.reset_password_window is not None:
+            self.reset_password_window.hide()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+        self.show()
+
+
+FORGOT_RESET_QSS = """
+QWidget#forgotRoot {
+    background-color: #040a16;
+}
+QFrame#forgotCard {
+    background-color: #081523;
+    border: 1px solid rgba(0, 170, 255, 0.28);
+    border-radius: 18px;
+}
+QLabel#forgotTitle {
+    color: #eaf4ff;
+    font-size: 26px;
+    font-weight: 800;
+}
+QLabel#forgotSub {
+    color: #9fb5d3;
+    font-size: 13px;
+}
+QLabel#forgotLabel {
+    color: #cfe8ff;
+    font-size: 12px;
+    font-weight: 700;
+}
+QLineEdit#forgotInput {
+    background-color: #050b18;
+    color: #eaf4ff;
+    border: 1px solid rgba(0, 170, 255, 0.22);
+    border-radius: 10px;
+    min-height: 40px;
+    padding: 0 12px;
+}
+QLineEdit#forgotInput:focus {
+    border: 1px solid rgba(30, 167, 255, 0.75);
+}
+QPushButton#forgotPrimary {
+    background-color: rgba(30, 167, 255, 0.18);
+    color: #eaf4ff;
+    border: 1px solid rgba(30, 167, 255, 0.58);
+    border-radius: 11px;
+    min-height: 40px;
+    font-weight: 700;
+}
+QPushButton#forgotPrimary:hover {
+    background-color: rgba(30, 167, 255, 0.26);
+}
+QPushButton#forgotSecondary {
+    background-color: transparent;
+    color: #7dd3fc;
+    border: 1px solid rgba(30, 167, 255, 0.32);
+    border-radius: 11px;
+    min-height: 40px;
+    font-weight: 700;
+}
+QPushButton#forgotSecondary:hover {
+    background-color: rgba(30, 167, 255, 0.12);
+}
+"""
+
 
 class ForgotPasswordWindow(QWidget):
     back_to_login = pyqtSignal()
+    open_reset_link = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ZIMON — Reset password")
-        self.setFixedSize(FORGOT_WINDOW_W, FORGOT_WINDOW_H)
+        self.setWindowTitle("ZIMON — Forgot Password")
+        self.setFixedSize(640, 420)
         self._build_ui()
 
     def _build_ui(self):
-        self.setObjectName("loginRootOuter")
+        self.setObjectName("forgotRoot")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 24)
+        root.setSpacing(0)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(FORGOT_MARGIN_X, FORGOT_MARGIN_Y, FORGOT_MARGIN_X, FORGOT_MARGIN_Y)
-        outer.setSpacing(0)
+        card = QFrame()
+        card.setObjectName("forgotCard")
+        root.addWidget(card, 1)
 
-        card = LoginSplitContainer()
-        card.setFixedSize(FORGOT_CARD_W, FORGOT_CARD_H)
-        card_row = QHBoxLayout()
-        card_row.addStretch(1)
-        card_row.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
-        card_row.addStretch(1)
-        outer.addLayout(card_row)
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(12)
 
-        shell = QHBoxLayout(card)
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.setSpacing(0)
-
-        left_panel = brand_hero_left_panel()
-        left_panel.setMinimumWidth(FORGOT_CARD_W // 2)
-        left_panel.setMaximumWidth(FORGOT_CARD_W // 2)
-        shell.addWidget(left_panel, 1)
-
-        right = LoginFormPanel()
-        right.setMinimumWidth(FORGOT_CARD_W // 2)
-        right.setMaximumWidth(FORGOT_CARD_W // 2)
-        outer_rv = QVBoxLayout(right)
-        outer_rv.setContentsMargins(0, 0, 0, 0)
-        outer_rv.setSpacing(0)
-
-        form_block = QWidget()
-        form_block.setObjectName("loginFormBlock")
-        form_block.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        rv = QVBoxLayout(form_block)
-        rv.setContentsMargins(52, 52, 52, 38)
-        rv.setSpacing(19)
-
-        title = QLabel("Reset your password")
-        title.setObjectName("loginWelcomeTitle")
-        rv.addWidget(title)
-
+        title = QLabel("Forgot Password")
+        title.setObjectName("forgotTitle")
         sub = QLabel(
-            "Enter the email associated with your account. If it is registered, "
-            "you will receive password reset instructions."
+            "Enter your registered email to receive a password reset link."
         )
-        sub.setObjectName("loginWelcomeSub")
+        sub.setObjectName("forgotSub")
         sub.setWordWrap(True)
-        rv.addWidget(sub)
+        lay.addWidget(title)
+        lay.addWidget(sub)
 
-        rv.addSpacing(5)
+        lbl_email = QLabel("Registered Email")
+        lbl_email.setObjectName("forgotLabel")
+        lay.addWidget(lbl_email)
 
-        em_label = QLabel("Email")
-        em_label.setObjectName("loginFieldCaption")
-        rv.addWidget(em_label)
-        self._email_shell, self.email_input = styled_input_row(
-            "✉", "Enter your email address"
-        )
-        rv.addWidget(self._email_shell)
+        self.email_input = QLineEdit()
+        self.email_input.setObjectName("forgotInput")
+        self.email_input.setPlaceholderText("name@example.com")
+        lay.addWidget(self.email_input)
 
-        rv.addStretch(1)
+        lbl_link = QLabel("Reset Link (paste from email)")
+        lbl_link.setObjectName("forgotLabel")
+        lay.addWidget(lbl_link)
 
-        self.send_btn = QPushButton("Send reset link   →")
-        self.send_btn.setObjectName("loginPrimaryBtn")
-        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.send_btn.setMinimumHeight(42)
-        self.send_btn.setMaximumHeight(44)
-        rv.addWidget(self.send_btn)
+        self.link_input = QLineEdit()
+        self.link_input.setObjectName("forgotInput")
+        self.link_input.setPlaceholderText("myapp://reset-password?token=...")
+        lay.addWidget(self.link_input)
+        lay.addStretch(1)
 
-        self.back_btn = QPushButton("← Back to sign in")
-        self.back_btn.setObjectName("loginForgotLink")
-        self.back_btn.setFlat(True)
-        self.back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        rv.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignCenter)
-
-        outer_rv.addWidget(form_block, 1)
-
-        shell.addWidget(right, 1)
-        shell.setStretch(0, 1)
-        shell.setStretch(1, 1)
-
-        self.setStyleSheet(AUTH_SHELL_QSS)
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.send_btn = QPushButton("Send Reset Link")
+        self.send_btn.setObjectName("forgotPrimary")
+        self.open_btn = QPushButton("Open Link")
+        self.open_btn.setObjectName("forgotSecondary")
+        self.back_btn = QPushButton("Back to Login")
+        self.back_btn.setObjectName("forgotSecondary")
+        row.addWidget(self.send_btn)
+        row.addWidget(self.open_btn)
+        row.addWidget(self.back_btn)
+        lay.addLayout(row)
 
         self.send_btn.clicked.connect(self._send_reset_link)
+        self.open_btn.clicked.connect(self._open_link_from_input)
         self.back_btn.clicked.connect(self.back_to_login.emit)
+        self.setStyleSheet(FORGOT_RESET_QSS)
 
     def _send_reset_link(self):
         email = self.email_input.text().strip()
         if not email:
-            QMessageBox.warning(self, "Missing email", "Please enter your email address.")
+            QMessageBox.warning(self, "Missing email", "Email is required.")
+            return
+        if not _is_valid_email(email):
+            QMessageBox.warning(self, "Invalid email", "Please enter a valid email address.")
             return
 
+        token = secrets.token_urlsafe(24)
+        reset_link = _build_reset_link(token)
+        try:
+            _send_password_reset_email(email, reset_link)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Email send failed",
+                f"Could not send reset email.\n\n{exc}",
+            )
+            return
+
+        self.link_input.setText(reset_link)
         QMessageBox.information(
             self,
-            "Success",
-            "Email send Successfully",
+            "Reset Link Sent",
+            "Password reset link sent successfully. Check your email and open the link.",
         )
-        self.back_to_login.emit()
+
+    def _open_link_from_input(self):
+        link = self.link_input.text().strip()
+        if not link:
+            QMessageBox.warning(self, "Missing link", "Paste the reset link from your email.")
+            return
+        self.open_reset_link.emit(link)
+
+
+class ResetPasswordWindow(QWidget):
+    back_to_login = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self._token = ""
+        self.setWindowTitle("ZIMON — Create New Password")
+        self.setFixedSize(640, 420)
+        self._build_ui()
+
+    def _build_ui(self):
+        self.setObjectName("forgotRoot")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(26, 24, 26, 24)
+        root.setSpacing(0)
+
+        card = QFrame()
+        card.setObjectName("forgotCard")
+        root.addWidget(card, 1)
+
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(12)
+
+        title = QLabel("Create New Password")
+        title.setObjectName("forgotTitle")
+        sub = QLabel("Enter and confirm your new password.")
+        sub.setObjectName("forgotSub")
+        lay.addWidget(title)
+        lay.addWidget(sub)
+
+        token_lbl = QLabel("Reset Token")
+        token_lbl.setObjectName("forgotLabel")
+        lay.addWidget(token_lbl)
+        self.token_input = QLineEdit()
+        self.token_input.setObjectName("forgotInput")
+        self.token_input.setPlaceholderText("Auto-filled from reset link")
+        lay.addWidget(self.token_input)
+
+        pw_lbl = QLabel("New Password")
+        pw_lbl.setObjectName("forgotLabel")
+        lay.addWidget(pw_lbl)
+        self.new_password_input = QLineEdit()
+        self.new_password_input.setObjectName("forgotInput")
+        self.new_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        lay.addWidget(self.new_password_input)
+
+        cpw_lbl = QLabel("Confirm Password")
+        cpw_lbl.setObjectName("forgotLabel")
+        lay.addWidget(cpw_lbl)
+        self.confirm_password_input = QLineEdit()
+        self.confirm_password_input.setObjectName("forgotInput")
+        self.confirm_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        lay.addWidget(self.confirm_password_input)
+        lay.addStretch(1)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self.update_btn = QPushButton("Update Password")
+        self.update_btn.setObjectName("forgotPrimary")
+        self.back_btn = QPushButton("Back to Login")
+        self.back_btn.setObjectName("forgotSecondary")
+        row.addWidget(self.update_btn)
+        row.addWidget(self.back_btn)
+        lay.addLayout(row)
+
+        self.update_btn.clicked.connect(self._update_password)
+        self.back_btn.clicked.connect(self.back_to_login.emit)
+        self.setStyleSheet(FORGOT_RESET_QSS)
+
+    def set_token(self, token: str):
+        self._token = token.strip()
+        self.token_input.setText(self._token)
+
+    def _update_password(self):
+        token = self.token_input.text().strip() or self._token
+        new_password = self.new_password_input.text()
+        confirm_password = self.confirm_password_input.text()
+
+        if not token:
+            QMessageBox.warning(self, "Missing token", "Reset token is required.")
+            return
+        if not new_password:
+            QMessageBox.warning(self, "Missing password", "New password is required.")
+            return
+        if not confirm_password:
+            QMessageBox.warning(self, "Missing confirm password", "Please confirm your password.")
+            return
+        if len(new_password) < 8:
+            QMessageBox.warning(self, "Weak password", "Password must be at least 8 characters.")
+            return
+        if new_password != confirm_password:
+            QMessageBox.warning(self, "Password mismatch", "Passwords do not match.")
+            return
+
+        payload = {"token": token, "password": new_password}
+        try:
+            response = requests.patch(
+                RESET_PASSWORD_API_ENDPOINT,
+                json=payload,
+                timeout=15,
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Reset failed",
+                f"Could not reach reset password API.\n\n{exc}",
+            )
+            return
+
+        if 200 <= response.status_code < 300:
+            QMessageBox.information(
+                self,
+                "Success",
+                "Password updated successfully",
+            )
+            self.new_password_input.clear()
+            self.confirm_password_input.clear()
+            self.back_to_login.emit()
+            return
+
+        err = response.text.strip() or "Reset password request failed."
+        QMessageBox.critical(self, "Reset failed", err)
