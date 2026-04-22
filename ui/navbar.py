@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap, QRegion
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -44,9 +44,10 @@ class CircleIconButton(QPushButton):
         self.setObjectName("ZCircleIconPill")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setFixedSize(38, 38)
+        self.setFixedSize(40, 40)
         self.setIcon(icon(icon_name, "#CFE8FF", 16))
-        self.setIconSize(self.iconSize())
+        # Force explicit icon size so glyphs always render.
+        self.setIconSize(QSize(18, 18))
         if tooltip:
             self.setToolTip(tooltip)
 
@@ -145,12 +146,12 @@ class TopNavbar(QFrame):
 
         root.addSpacing(16)
 
-        actions = QWidget()
+        actions = QFrame()
         actions.setObjectName("ZNavActions")
         actions.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         ar = QHBoxLayout(actions)
-        ar.setContentsMargins(0, 0, 0, 0)
-        ar.setSpacing(8)
+        ar.setContentsMargins(6, 5, 6, 5)
+        ar.setSpacing(6)
         ar.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         ar.setDirection(QHBoxLayout.Direction.LeftToRight)
         self._bell = CircleIconButton(ICONS["bell"], "Notifications")
@@ -164,14 +165,6 @@ class TopNavbar(QFrame):
         ar.addWidget(self._btn_settings, 0, Qt.AlignmentFlag.AlignVCenter)
 
         fn = str(self._user.get("full_name", "Researcher")).strip() or "Researcher"
-        letter = (fn[:1] or "R").upper()
-        self._avatar = QPushButton(letter)
-        self._avatar.setObjectName("ZUserAvatarPill")
-        self._avatar.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._avatar.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._avatar.setFixedSize(38, 38)
-        self._avatar.clicked.connect(self.profile_clicked.emit)
-        ar.addWidget(self._avatar, 0, Qt.AlignmentFlag.AlignVCenter)
 
         self._profile_btn = UserProfileButton(fn)
         self._profile_btn.clicked.connect(self.profile_clicked.emit)
@@ -243,37 +236,58 @@ class TopNavbar(QFrame):
                 font-weight: 700;
             }
             QPushButton#ZCircleIconPill {
-                background: #101a2f;
-                border: 1px solid rgba(0, 170, 255, 0.18);
-                border-radius: 19px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(18, 33, 58, 0.90),
+                    stop:1 rgba(11, 23, 43, 0.92)
+                );
+                color: #d9eeff;
+                border: 1px solid rgba(66, 180, 255, 0.55);
+                border-radius: 14px;
+                padding: 0;
             }
             QPushButton#ZCircleIconPill:hover {
-                border: 1px solid rgba(30, 167, 255, 0.55);
-                background: #15243d;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(23, 47, 82, 0.96),
+                    stop:1 rgba(14, 35, 64, 0.96)
+                );
+                border: 1px solid rgba(92, 201, 255, 0.85);
             }
-            QPushButton#ZUserAvatarPill {
-                background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #7c4dff, stop:1 #1ea7ff);
-                color: #eaf4ff;
-                border: 1px solid rgba(0, 212, 255, 0.45);
-                border-radius: 19px;
-                font-size: 12px;
-                font-weight: 800;
+            QPushButton#ZCircleIconPill:pressed {
+                background: rgba(15, 41, 74, 0.98);
+                border: 1px solid rgba(34, 156, 255, 0.95);
             }
-            QPushButton#ZUserAvatarPill:hover {
-                border: 1px solid rgba(0, 212, 255, 0.8);
+            QFrame#ZNavActions {
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(11, 24, 43, 0.92),
+                    stop:1 rgba(8, 18, 34, 0.94)
+                );
+                border: 1px solid rgba(61, 173, 255, 0.30);
+                border-radius: 20px;
             }
             QToolButton#ZUserProfilePill {
-                background: #101a2f;
-                color: #eaf4ff;
-                border: 1px solid rgba(0, 170, 255, 0.18);
-                border-radius: 19px;
-                padding: 0 34px 0 16px;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(19, 37, 63, 0.92),
+                    stop:1 rgba(11, 25, 46, 0.94)
+                );
+                color: #eaf5ff;
+                border: 1px solid rgba(70, 184, 255, 0.42);
+                border-radius: 14px;
+                padding: 0 36px 0 16px;
                 font-size: 12px;
-                font-weight: 700;
+                font-weight: 800;
+                letter-spacing: 0.2px;
             }
             QToolButton#ZUserProfilePill:hover {
-                border: 1px solid rgba(30, 167, 255, 0.55);
-                background: #15243d;
+                background: qlineargradient(
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 rgba(25, 53, 90, 0.97),
+                    stop:1 rgba(14, 35, 64, 0.97)
+                );
+                border: 1px solid rgba(98, 206, 255, 0.82);
             }
             QToolButton#ZUserProfilePill::menu-button {
                 subcontrol-origin: padding;

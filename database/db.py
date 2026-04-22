@@ -3,6 +3,10 @@ import sys
 from pathlib import Path
 
 import psycopg
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional dependency
+    load_dotenv = None
 
 
 def get_runtime_base_dir() -> Path:
@@ -17,10 +21,21 @@ def get_app_data_dir() -> Path:
     return get_runtime_base_dir()
 
 
-_DEFAULT_CONNECTION_STRING = (
+_LOCAL_FALLBACK_CONNECTION_STRING = (
+    "host=127.0.0.1 port=5432 dbname=zimon user=postgres password=postgres sslmode=disable"
+)
+_LEGACY_CLOUD_CONNECTION_STRING = (
     "Host=trolley.proxy.rlwy.net;Port=43066;Database=railway;Username=postgres;"
     "Password=ZvjFxEikmIXDgwwvJMpZJjUmvpDAVmkE;SSL Mode=Require;Trust Server Certificate=true"
 )
+
+
+def _load_env_files() -> None:
+    if load_dotenv is None:
+        return
+    root = Path(__file__).resolve().parent.parent
+    load_dotenv(root / ".env")
+    load_dotenv(root / "backend" / ".env", override=True)
 
 
 def _normalize_connection_string(raw_connection_string: str) -> str:
@@ -52,13 +67,77 @@ def _normalize_connection_string(raw_connection_string: str) -> str:
     return " ".join(f"{k}={v}" for k, v in mapped.items() if v)
 
 
+def _conn_dict(conninfo: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in conninfo.split():
+        if "=" not in item:
+            continue
+        k, v = item.split("=", 1)
+        out[k.strip().lower()] = v.strip()
+    return out
+
+
+def _looks_like_ipv4(host: str) -> bool:
+    parts = host.split(".")
+    if len(parts) != 4:
+        return False
+    return all(p.isdigit() and 0 <= int(p) <= 255 for p in parts)
+
+
+def _with_overrides(conninfo: str, **overrides: str) -> str:
+    data = _conn_dict(conninfo)
+    for k, v in overrides.items():
+        data[k.lower()] = v
+    order = ("host", "port", "dbname", "user", "password", "sslmode")
+    items = [f"{k}={data[k]}" for k in order if data.get(k)]
+    for k in data.keys():
+        if k not in order:
+            items.append(f"{k}={data[k]}")
+    return " ".join(items)
+
+
 def get_connection():
-    raw_connection_string = (
+    _load_env_files()
+    explicit = (
         os.environ.get("ZIMON_DATABASE_CONNECTION_STRING")
         or os.environ.get("ZIMON_DATABASE_URL")
-        or _DEFAULT_CONNECTION_STRING
-    )
-    return psycopg.connect(_normalize_connection_string(raw_connection_string))
+        or ""
+    ).strip()
+
+    attempts: list[tuple[str, str]] = []
+    if explicit:
+        normalized = _normalize_connection_string(explicit)
+        attempts.append(("configured", normalized))
+        cfg = _conn_dict(normalized)
+        host = cfg.get("host", "")
+        # Rescue for Railway-style configs using raw IP (breaks TLS/SNI on some networks).
+        if host and _looks_like_ipv4(host):
+            attempts.append(
+                (
+                    "configured-hostname-fallback",
+                    _with_overrides(normalized, host="trolley.proxy.rlwy.net", sslmode="require"),
+                )
+            )
+        # Retry with explicit sslmode=require unless already set to require.
+        if cfg.get("sslmode", "").lower() != "require":
+            attempts.append(("configured-ssl-require", _with_overrides(normalized, sslmode="require")))
+    attempts.append(("local-fallback", _LOCAL_FALLBACK_CONNECTION_STRING))
+    attempts.append(("legacy-cloud-fallback", _normalize_connection_string(_LEGACY_CLOUD_CONNECTION_STRING)))
+
+    last_error: Exception | None = None
+    for label, conninfo in attempts:
+        try:
+            return psycopg.connect(conninfo, connect_timeout=8)
+        except Exception as exc:
+            last_error = exc
+            # Try next candidate.
+            continue
+
+    raise RuntimeError(
+        "Database connection failed. Checked configured DB connection and local fallback "
+        "(host=127.0.0.1 port=5432 dbname=zimon). Set ZIMON_DATABASE_CONNECTION_STRING "
+        "or ZIMON_DATABASE_URL to a reachable PostgreSQL instance."
+    ) from last_error
 
 
 def init_db():

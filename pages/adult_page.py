@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
+from pathlib import Path
 
+import numpy as np
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -326,19 +329,29 @@ class FooterStatusBar(QFrame):
 
 
 class AdultPage(QWidget):
+    frame_arrived = pyqtSignal(object)
+
     def __init__(
         self,
         hardware: HardwareService,
         protocols: ProtocolService,
         recorder: RecorderService,
+        camera_controller=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._hw = hardware
         self._proto = protocols
         self._rec = recorder
+        self._camera = camera_controller
+        self._active_camera_name: str | None = None
+        self._preview_started = False
+        self._pending_record_start = False
+        self._record_writer = None
+        self._record_path: Path | None = None
         self._build()
         self._wire()
+        self.frame_arrived.connect(self._on_frame_arrived)
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(500)
@@ -486,14 +499,18 @@ class AdultPage(QWidget):
             mw._go_protocol()
 
     def _start_recording(self) -> None:
+        self._ensure_live_preview()
         self._rec.start()
         self.preview.view.set_recording(True)
         self.preview.view.set_status_text("Recording in progress")
+        self._pending_record_start = True
 
     def _stop_recording(self) -> None:
         self._rec.stop()
         self.preview.view.set_recording(False)
         self.preview.view.set_status_text("Live aquarium preview")
+        self._pending_record_start = False
+        self._close_record_writer()
 
     def _sync_protocol(self) -> None:
         model = self._proto.model()
@@ -528,3 +545,86 @@ class AdultPage(QWidget):
         cam_status = mp.get("camera", DeviceStatus.DISCONNECTED)
         if cam_status in (DeviceStatus.DISCONNECTED, DeviceStatus.ERROR):
             self.preview.view.set_status_text("Camera offline")
+            self._stop_live_preview()
+        else:
+            self._ensure_live_preview()
+
+    def _ensure_live_preview(self) -> None:
+        if self._preview_started or self._camera is None:
+            return
+        try:
+            cameras = list(self._camera.list_cameras() or [])
+        except Exception:
+            cameras = []
+        if not cameras:
+            return
+        name = cameras[0]
+        try:
+            ok = bool(self._camera.start_preview(name, self._on_camera_frame))
+        except Exception:
+            ok = False
+        if ok:
+            self._active_camera_name = name
+            self._preview_started = True
+            self.preview.view.set_status_text(f"Live camera: {name}")
+
+    def _stop_live_preview(self) -> None:
+        if not self._preview_started or self._camera is None or not self._active_camera_name:
+            return
+        try:
+            self._camera.stop_preview(self._active_camera_name)
+        except Exception:
+            pass
+        self._preview_started = False
+        self._active_camera_name = None
+        self._close_record_writer()
+
+    def _on_camera_frame(self, frame: np.ndarray) -> None:
+        self.frame_arrived.emit(frame)
+
+    def _on_frame_arrived(self, frame: np.ndarray) -> None:
+        if frame is None:
+            return
+        self.preview.view.set_frame(frame)
+        if self._rec.is_running():
+            self._write_record_frame(frame)
+
+    def _recordings_root(self) -> Path:
+        env = os.environ.get("ZIMON_RECORDINGS_ROOT", "").strip()
+        if env:
+            return Path(env).expanduser()
+        default = Path("D:/Zimon")
+        if Path("D:/").exists():
+            return default
+        return Path.cwd() / "recordings"
+
+    def _write_record_frame(self, frame: np.ndarray) -> None:
+        import cv2
+
+        if self._record_writer is None:
+            root = self._recordings_root()
+            root.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            exp = getattr(self._rec, "experiment_id", "EXP")
+            self._record_path = root / f"{exp}_{ts}.mp4"
+            h, w = frame.shape[:2]
+            fps = float(self.preview.cmb_fps.currentText() or 30)
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            self._record_writer = cv2.VideoWriter(str(self._record_path), fourcc, fps, (w, h))
+            self._pending_record_start = False
+        if self._record_writer is not None:
+            self._record_writer.write(frame)
+
+    def _close_record_writer(self) -> None:
+        if self._record_writer is None:
+            return
+        try:
+            self._record_writer.release()
+        except Exception:
+            pass
+        self._record_writer = None
+
+    def closeEvent(self, event) -> None:
+        self._stop_live_preview()
+        self._close_record_writer()
+        super().closeEvent(event)

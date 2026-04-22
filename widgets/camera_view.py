@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import numpy as np
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPainter
+from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 
@@ -40,6 +41,32 @@ class CameraView(QWidget):
 
     def set_status_text(self, text: str) -> None:
         self._video.setText(text)
+
+    def set_frame(self, frame: np.ndarray) -> None:
+        """Render a camera frame (BGR/RGB/Gray ndarray) into the preview label."""
+        if frame is None or frame.size == 0:
+            return
+        if frame.ndim == 2:
+            h, w = frame.shape
+            qimg = QImage(frame.data, w, h, frame.strides[0], QImage.Format.Format_Grayscale8)
+        elif frame.ndim == 3 and frame.shape[2] == 3:
+            # OpenCV cameras usually provide BGR; convert to RGB for Qt.
+            rgb = frame[:, :, ::-1].copy()
+            h, w, _ = rgb.shape
+            qimg = QImage(rgb.data, w, h, rgb.strides[0], QImage.Format.Format_RGB888)
+        elif frame.ndim == 3 and frame.shape[2] == 4:
+            rgba = frame[:, :, [2, 1, 0, 3]].copy()
+            h, w, _ = rgba.shape
+            qimg = QImage(rgba.data, w, h, rgba.strides[0], QImage.Format.Format_RGBA8888)
+        else:
+            return
+        pix = QPixmap.fromImage(qimg).scaled(
+            self._video.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._video.setPixmap(pix)
+        self._video.setText("")
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)

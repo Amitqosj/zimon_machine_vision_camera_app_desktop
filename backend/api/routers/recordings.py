@@ -16,6 +16,9 @@ def recordings_root() -> Path:
     env = os.environ.get("ZIMON_RECORDINGS_ROOT", "").strip()
     if env:
         return Path(env).expanduser().resolve()
+    preferred = Path("D:/Zimon")
+    if Path("D:/").exists():
+        return preferred.resolve()
     return (Path.cwd() / "recordings").resolve()
 
 

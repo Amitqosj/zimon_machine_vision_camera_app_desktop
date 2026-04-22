@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
+from pathlib import Path
 
-from PyQt6.QtCore import QDateTime, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QDateTime, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QResizeEvent
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -60,6 +62,10 @@ class Recording:
     experiment: str
     protocol: str
     status: str = "Ready"
+    full_path: str = ""
+    duration: str = "120s"
+    fps: str = "30"
+    camera: str = "USB Camera Top"
 
 
 class WarningBanner(QFrame):
@@ -124,10 +130,11 @@ class RecordingList(QTableWidget):
                     "date": rec.date,
                     "protocol": rec.protocol,
                     "status": rec.status,
-                    "camera": "USB Camera Top",
-                    "fps": "60",
-                    "duration": "120s",
-                    "path": f"/recordings/{rec.experiment}",
+                    "camera": rec.camera,
+                    "fps": rec.fps,
+                    "duration": rec.duration,
+                    "path": rec.full_path or f"/recordings/{rec.experiment}",
+                    "full_path": rec.full_path,
                     "time": "10:14:22",
                 }
             )
@@ -189,6 +196,7 @@ class PlaybackControls(QWidget):
     pause_clicked = pyqtSignal()
     stop_clicked = pyqtSignal()
     rewind_clicked = pyqtSignal()
+    next_clicked = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -219,6 +227,7 @@ class PlaybackControls(QWidget):
         self.btn_pause.clicked.connect(self.pause_clicked.emit)
         self.btn_stop.clicked.connect(self.stop_clicked.emit)
         self.btn_rewind.clicked.connect(self.rewind_clicked.emit)
+        self.btn_next.clicked.connect(self.next_clicked.emit)
 
 
 class VideoPreviewWidget(QFrame):
@@ -238,6 +247,8 @@ class VideoPreviewWidget(QFrame):
         self._video_widget = None
         self._player = None
         self._audio = None
+        self._syncing_seek = False
+        self._source_ready = False
         if _HAS_MEDIA:
             self._video_widget = QVideoWidget(self)
             self._video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
@@ -249,18 +260,103 @@ class VideoPreviewWidget(QFrame):
             self._player.setVideoOutput(self._video_widget)
 
         lay.addWidget(self.placeholder, 1)
+        self._bind_player_signals()
+
+    def _bind_player_signals(self) -> None:
+        if not self._player:
+            return
+        self._player.errorOccurred.connect(self._on_player_error)
+
+    def _on_player_error(self, *_args) -> None:
+        if not self._player:
+            return
+        msg = self._player.errorString() or "Unable to play this video file."
+        self.placeholder.setText(msg)
+        self.placeholder.show()
+        if self._video_widget:
+            self._video_widget.hide()
 
     def set_recording(self, data: dict | None) -> None:
         if not data:
             self.placeholder.setText("Select a recording")
             self.placeholder.show()
+            if self._player:
+                self._player.stop()
+                self._player.setSource(QUrl())
+            self._source_ready = False
             if self._video_widget:
                 self._video_widget.hide()
             return
-        self.placeholder.setText(f"Recording ready: {data.get('id', 'Selected recording')}")
+        src = (data.get("full_path") or data.get("path") or "").strip()
+        if _HAS_MEDIA and src and Path(src).is_file():
+            self.placeholder.setText(f"Loaded: {data.get('id', 'Selected recording')}\nClick Replay to start playback.")
+            self.placeholder.show()
+            if self._video_widget:
+                self._video_widget.hide()
+            if self._player:
+                self._player.stop()
+                self._player.setSource(QUrl.fromLocalFile(str(Path(src).resolve())))
+                self._player.setPosition(0)
+                self._source_ready = True
+            return
+        self.placeholder.setText(f"Recording ready: {data.get('id', 'Selected recording')}\n(No playable file found)")
         self.placeholder.show()
+        self._source_ready = False
         if self._video_widget:
             self._video_widget.hide()
+
+    def play(self) -> None:
+        if self._player and self._source_ready:
+            if self._video_widget:
+                self._video_widget.show()
+            self.placeholder.hide()
+            self._player.play()
+
+    def pause(self) -> None:
+        # Requested UX: Pause should fully stop playback.
+        self.stop()
+
+    def stop(self) -> None:
+        if self._player:
+            self._player.stop()
+        if self._source_ready:
+            self.placeholder.show()
+            if self._video_widget:
+                self._video_widget.hide()
+
+    def rewind_5s(self) -> None:
+        if self._player:
+            self._player.setPosition(max(0, self._player.position() - 5000))
+
+    def set_seek_percent(self, value: int) -> None:
+        if not self._player or self._syncing_seek:
+            return
+        dur = self._player.duration()
+        if dur <= 0:
+            return
+        target = int((value / 1000.0) * dur)
+        if abs(self._player.position() - target) > 80:
+            self._player.setPosition(target)
+
+    def bind_seek_slider(self, slider: QSlider) -> None:
+        if not self._player:
+            return
+        slider.setRange(0, 1000)
+        slider.valueChanged.connect(self.set_seek_percent)
+        self._player.positionChanged.connect(lambda pos: self._on_player_position(slider, pos))
+
+    def _on_player_position(self, slider: QSlider, pos: int) -> None:
+        if not self._player:
+            return
+        dur = max(1, self._player.duration())
+        value = int((pos / dur) * 1000)
+        self._syncing_seek = True
+        try:
+            slider.blockSignals(True)
+            slider.setValue(value)
+        finally:
+            slider.blockSignals(False)
+            self._syncing_seek = False
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
@@ -277,6 +373,11 @@ class PlayerCard(QFrame):
         lay.addWidget(self.preview, 1)
         self.controls = PlaybackControls()
         lay.addWidget(self.controls)
+        self.controls.replay_clicked.connect(self.preview.play)
+        self.controls.pause_clicked.connect(self.preview.pause)
+        self.controls.stop_clicked.connect(self.preview.stop)
+        self.controls.rewind_clicked.connect(self.preview.rewind_5s)
+        self.preview.bind_seek_slider(self.controls.seek)
 
     def set_recording(self, data: dict | None) -> None:
         self.preview.set_recording(data)
@@ -584,20 +685,120 @@ class ExperimentsPage(QWidget):
 
         self.left.recording_selected.connect(self.player.set_recording)
         self.left.recording_selected.connect(self.right.set_recording)
+        self.player.controls.next_clicked.connect(self._select_next_recording)
         self.refresh_btn.clicked.connect(self._load_sample_data)
         self._clock = QTimer(self)
         self._clock.timeout.connect(self._tick_clock)
         self._clock.start(1000)
         self._tick_clock()
 
+    def _select_next_recording(self) -> None:
+        table = self.left.list
+        rows = table.rowCount()
+        if rows <= 0:
+            return
+        cur = table.currentRow()
+        nxt = 0 if cur < 0 or cur + 1 >= rows else cur + 1
+        table.selectRow(nxt)
+
     def _load_sample_data(self) -> None:
-        now = datetime.now()
-        rows = [
-            Recording(1, now.strftime("%Y-%m-%d"), "EXP_2026_0413_01", "Startle Response"),
-            Recording(2, now.strftime("%Y-%m-%d"), "EXP_2026_0413_02", "Custom Assay"),
-            Recording(3, now.strftime("%Y-%m-%d"), "EXP_2026_0413_03", "Startle Response"),
-        ]
+        rows = self._load_recordings_with_fallback()
         self.left.set_recordings(rows)
+
+    def _recordings_root(self) -> Path:
+        env = os.environ.get("ZIMON_RECORDINGS_ROOT", "").strip()
+        if env:
+            return Path(env).expanduser()
+        if Path("D:/").exists():
+            return Path("D:/Zimon")
+        return Path.cwd() / "recordings"
+
+    def _load_recordings_with_fallback(self) -> list[Recording]:
+        root = self._recordings_root()
+        rows: list[Recording] = []
+        videos: list[Path] = []
+        if root.is_dir():
+            exts = (".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v")
+            # Keep scanning lightweight to avoid UI freezes on very large drives.
+            patterns = [f"*{ext}" for ext in exts] + [f"*/*{ext}" for ext in exts]
+            for pat in patterns:
+                for p in root.glob(pat):
+                    if p.is_file():
+                        videos.append(p)
+                    if len(videos) >= 300:
+                        break
+                if len(videos) >= 300:
+                    break
+        videos.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for i, p in enumerate(videos[:100], start=1):
+            dt = datetime.fromtimestamp(p.stat().st_mtime)
+            rows.append(
+                Recording(
+                    i,
+                    dt.strftime("%Y-%m-%d"),
+                    p.stem[:40],
+                    "Recorded Session",
+                    full_path=str(p.resolve()),
+                    duration="auto",
+                    fps="auto",
+                    camera="Connected camera",
+                )
+            )
+        if rows:
+            return rows
+
+        sample = self._ensure_static_sample_video(root)
+        now = datetime.now()
+        return [
+            Recording(
+                1,
+                now.strftime("%Y-%m-%d"),
+                "STATIC_SAMPLE_DEMO",
+                "Demo Playback",
+                full_path=str(sample.resolve()),
+                duration="10s",
+                fps="30",
+                camera="Sample generator",
+            )
+        ]
+
+    def _ensure_static_sample_video(self, root: Path) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
+        sample = root / "zimon_static_demo.mp4"
+        if sample.is_file():
+            return sample
+        try:
+            import cv2
+            import numpy as np
+
+            w, h = 960, 540
+            fps = 30.0
+            duration_s = 10
+            writer = cv2.VideoWriter(
+                str(sample),
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (w, h),
+            )
+            frames = int(fps * duration_s)
+            for i in range(frames):
+                frame = np.zeros((h, w, 3), dtype=np.uint8)
+                t = i / fps
+                # Static-style demo: gradient background + moving marker + overlay text.
+                frame[:, :, 0] = np.linspace(20, 110, w, dtype=np.uint8)
+                frame[:, :, 1] = 28
+                frame[:, :, 2] = 12
+                x = int((w - 80) * (i / max(1, frames - 1)))
+                cv2.rectangle(frame, (x, 220), (x + 80, 320), (0, 200, 255), -1)
+                cv2.putText(frame, "ZIMON STATIC DEMO PLAYBACK", (24, 56), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 240, 255), 2)
+                cv2.putText(frame, f"t = {t:0.2f}s", (24, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (180, 230, 255), 2)
+                cv2.putText(frame, "Use this clip to validate Experiments player controls", (24, 510), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 220, 255), 1)
+                writer.write(frame)
+            writer.release()
+        except Exception:
+            # If codecs are unavailable, keep a placeholder path; UI will show a message.
+            sample.touch(exist_ok=True)
+        return sample
 
     def _tick_clock(self) -> None:
         self.footer.time.setText(QDateTime.currentDateTime().toString("h:mm AP MMM d, yyyy"))

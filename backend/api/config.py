@@ -43,7 +43,7 @@ class Settings(BaseSettings):
         "ZIMON_CORS_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:5180",
     )
-    recovery_secret_key: str = os.environ.get("ZIMON_RECOVERY_SECRET", "")
+    recovery_secret_key: str = os.environ.get("ZIMON_RECOVERY_SECRET", "dscxvfbfrertdrer46534ewdsdwe3e454fef")
     recovery_allow_ips: str = os.environ.get("ZIMON_RECOVERY_ALLOW_IPS", "")
 
     @property

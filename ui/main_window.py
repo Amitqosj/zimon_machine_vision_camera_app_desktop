@@ -152,7 +152,12 @@ class ZimonMainWindow(QMainWindow):
         self._stack.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._page_adult = AdultPage(self._hardware, self._protocols, self._recorder)
+        self._page_adult = AdultPage(
+            self._hardware,
+            self._protocols,
+            self._recorder,
+            camera_controller=self.camera,
+        )
         self._page_larval = LarvalPage(self._hardware, self._protocols, self._recorder)
         self._page_env = EnvironmentPage(self._hardware)
         self._page_protocol = ProtocolBuilderPage(self._protocols)
