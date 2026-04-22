@@ -8,12 +8,14 @@ def create_notification(title: str, message: str, user_id: int | None = None) ->
         cursor.execute(
             """
             INSERT INTO notifications (title, message, user_id, is_read)
-            VALUES (?, ?, ?, 0)
+            VALUES (%s, %s, %s, FALSE)
+            RETURNING id
             """,
             (title, message, user_id),
         )
+        new_id = cursor.fetchone()[0]
         conn.commit()
-        return int(cursor.lastrowid)
+        return int(new_id)
     finally:
         conn.close()
 
@@ -35,13 +37,13 @@ def list_for_user(user_id: int) -> list[dict]:
                     WHEN n.user_id IS NULL THEN
                         CASE WHEN EXISTS (
                             SELECT 1 FROM notification_reads r
-                            WHERE r.notification_id = n.id AND r.user_id = ?
-                        ) THEN 1 ELSE 0 END
+                            WHERE r.notification_id = n.id AND r.user_id = %s
+                        ) THEN TRUE ELSE FALSE END
                     ELSE n.is_read
                 END AS is_read_effective
             FROM notifications n
-            WHERE n.user_id IS NULL OR n.user_id = ?
-            ORDER BY datetime(n.created_at) DESC
+            WHERE n.user_id IS NULL OR n.user_id = %s
+            ORDER BY n.created_at DESC
             LIMIT 100
             """,
             (user_id, user_id),
@@ -68,7 +70,7 @@ def mark_read(notification_id: int, reader_user_id: int) -> bool:
     try:
         cursor.execute(
             """
-            SELECT user_id FROM notifications WHERE id = ?
+            SELECT user_id FROM notifications WHERE id = %s
             """,
             (notification_id,),
         )
@@ -81,15 +83,16 @@ def mark_read(notification_id: int, reader_user_id: int) -> bool:
         if owner_id is None:
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO notification_reads (notification_id, user_id)
-                VALUES (?, ?)
+                INSERT INTO notification_reads (notification_id, user_id)
+                VALUES (%s, %s)
+                ON CONFLICT (notification_id, user_id) DO NOTHING
                 """,
                 (notification_id, reader_user_id),
             )
         else:
             cursor.execute(
                 """
-                UPDATE notifications SET is_read = 1 WHERE id = ?
+                UPDATE notifications SET is_read = TRUE WHERE id = %s
                 """,
                 (notification_id,),
             )

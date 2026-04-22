@@ -64,6 +64,10 @@ results/
 recordings/
 analysis_output/
 
+# Local release artifacts (too large for git)
+client_package.zip
+client_package/
+
 
 
 

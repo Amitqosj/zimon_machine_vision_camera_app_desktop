@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import sqlite3
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
@@ -24,7 +23,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from database.db import get_app_data_dir
+from database.db import get_connection
 
 
 class AdminFeedbackManagementDialog(QDialog):
@@ -47,7 +46,6 @@ class AdminFeedbackManagementDialog(QDialog):
         self.setMinimumSize(980, 620)
         self.setModal(True)
 
-        self._db_path = get_app_data_dir() / "feedback.db"
         self._all_feedback: list[dict[str, str]] = []
         self._current_feedback: list[dict[str, str]] = []
         self._reviewed_ids: set[int] = set()
@@ -203,44 +201,44 @@ class AdminFeedbackManagementDialog(QDialog):
         actions_layout.addWidget(self.close_btn)
         root.addWidget(actions, 0)
 
-    def _ensure_feedback_table(self, conn: sqlite3.Connection) -> None:
+    def _ensure_feedback_table(self, conn) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id BIGSERIAL PRIMARY KEY,
                 name TEXT,
                 email TEXT,
                 category TEXT,
                 message TEXT,
-                created_at TEXT
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
 
     def _load_feedback(self) -> None:
         try:
-            with sqlite3.connect(self._db_path) as conn:
+            with get_connection() as conn:
                 self._ensure_feedback_table(conn)
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute(
+                cursor = conn.execute(
                     """
                     SELECT id, name, email, category, message, created_at
                     FROM feedback
                     ORDER BY id DESC
                     """
-                ).fetchall()
+                )
+                rows = cursor.fetchall()
         except Exception as exc:
             QMessageBox.critical(self, "Feedback Management", f"Failed to load feedback.\n\n{exc}")
             return
 
         self._all_feedback = [
             {
-                "id": int(row["id"]),
-                "name": str(row["name"] or ""),
-                "email": str(row["email"] or ""),
-                "category": str(row["category"] or ""),
-                "message": str(row["message"] or ""),
-                "created_at": str(row["created_at"] or ""),
+                "id": int(row[0]),
+                "name": str(row[1] or ""),
+                "email": str(row[2] or ""),
+                "category": str(row[3] or ""),
+                "message": str(row[4] or ""),
+                "created_at": str(row[5] or ""),
             }
             for row in rows
         ]
@@ -331,8 +329,8 @@ class AdminFeedbackManagementDialog(QDialog):
             return
 
         try:
-            with sqlite3.connect(self._db_path) as conn:
-                conn.execute("DELETE FROM feedback WHERE id = ?", (selected["id"],))
+            with get_connection() as conn:
+                conn.execute("DELETE FROM feedback WHERE id = %s", (selected["id"],))
                 conn.commit()
         except Exception as exc:
             QMessageBox.critical(self, "Feedback Management", f"Failed to delete feedback.\n\n{exc}")

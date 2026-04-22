@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from datetime import datetime
 
 from PyQt6.QtCore import Qt
@@ -17,11 +16,11 @@ from PyQt6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
 )
-from database.db import get_app_data_dir
+from database.db import get_connection
 
 
 class FeedbackSupportDialog(QDialog):
-    """Collect and persist user feedback in a local SQLite database."""
+    """Collect and persist user feedback in PostgreSQL."""
 
     _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
@@ -33,7 +32,6 @@ class FeedbackSupportDialog(QDialog):
         self.setMinimumWidth(540)
         self.setMinimumHeight(430)
         self.resize(620, 460)
-        self._db_path = get_app_data_dir() / "feedback.db"
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -119,16 +117,16 @@ class FeedbackSupportDialog(QDialog):
 
         return True, ""
 
-    def _ensure_feedback_table(self, conn: sqlite3.Connection) -> None:
+    def _ensure_feedback_table(self, conn) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id BIGSERIAL PRIMARY KEY,
                 name TEXT,
                 email TEXT,
                 category TEXT,
                 message TEXT,
-                created_at TEXT
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
@@ -148,12 +146,12 @@ class FeedbackSupportDialog(QDialog):
         }
 
         try:
-            with sqlite3.connect(self._db_path) as conn:
+            with get_connection() as conn:
                 self._ensure_feedback_table(conn)
                 conn.execute(
                     """
                     INSERT INTO feedback (name, email, category, message, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
                     (
                         payload["name"],

@@ -13,7 +13,7 @@ def list_presets(user_id: int) -> List[Dict[str, Any]]:
             """
             SELECT id, user_id, name, description, video_path, config_path, output_dir, created_at
             FROM presets
-            WHERE user_id = ?
+            WHERE user_id = %s
             ORDER BY created_at DESC
             """,
             (user_id,),
@@ -49,12 +49,14 @@ def create_preset(
         cursor.execute(
             """
             INSERT INTO presets (user_id, name, description, video_path, config_path, output_dir)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (user_id, name, description or "", video_path or "", config_path or "", output_dir or ""),
         )
+        new_id = cursor.fetchone()[0]
         conn.commit()
-        return int(cursor.lastrowid)
+        return int(new_id)
     finally:
         conn.close()
 
@@ -74,8 +76,8 @@ def update_preset(
         cursor.execute(
             """
             UPDATE presets
-            SET name = ?, description = ?, video_path = ?, config_path = ?, output_dir = ?
-            WHERE id = ? AND user_id = ?
+            SET name = %s, description = %s, video_path = %s, config_path = %s, output_dir = %s
+            WHERE id = %s AND user_id = %s
             """,
             (
                 name,
@@ -98,7 +100,7 @@ def delete_preset(user_id: int, preset_id: int) -> bool:
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "DELETE FROM presets WHERE id = ? AND user_id = ?",
+            "DELETE FROM presets WHERE id = %s AND user_id = %s",
             (preset_id, user_id),
         )
         conn.commit()
@@ -115,7 +117,7 @@ def get_preset(user_id: int, preset_id: int) -> Optional[Dict[str, Any]]:
             """
             SELECT id, user_id, name, description, video_path, config_path, output_dir, created_at
             FROM presets
-            WHERE id = ? AND user_id = ?
+            WHERE id = %s AND user_id = %s
             """,
             (preset_id, user_id),
         )

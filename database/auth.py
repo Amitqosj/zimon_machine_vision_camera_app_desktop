@@ -1,5 +1,5 @@
 import bcrypt
-import sqlite3
+import psycopg
 
 from database.db import get_connection
 
@@ -29,7 +29,7 @@ def write_audit_log(
         cursor.execute(
             """
             INSERT INTO audit_logs (action, performed_by_user_id, target_user_id, ip_address, description)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
             """,
             (action, performed_by_user_id, target_user_id, ip_address, description),
         )
@@ -46,13 +46,15 @@ def create_user(full_name, username, email, password, role=ROLE_STUDENT):
         cursor.execute(
             """
             INSERT INTO users (full_name, username, email, password_hash, role, is_active, is_locked)
-            VALUES (?, ?, ?, ?, ?, 1, 0)
+            VALUES (%s, %s, %s, %s, %s, TRUE, FALSE)
+            RETURNING id
             """,
             (full_name.strip(), username.strip(), email.strip().lower(), password_hash, role),
         )
+        created_id = cursor.fetchone()[0]
         conn.commit()
-        return True, cursor.lastrowid
-    except sqlite3.IntegrityError as e:
+        return True, created_id
+    except psycopg.IntegrityError as e:
         msg = str(e).lower()
         if "users.username" in msg or "username" in msg:
             return False, "Username already exists"
@@ -77,7 +79,7 @@ def verify_login_credentials(username_or_email, password):
             """
             SELECT id, full_name, username, email, password_hash, role, is_active, is_locked, created_at
             FROM users
-            WHERE lower(username) = lower(?) OR lower(email) = lower(?)
+            WHERE lower(username) = lower(%s) OR lower(email) = lower(%s)
             """,
             (username_or_email.strip(), username_or_email.strip()),
         )
@@ -111,7 +113,7 @@ def set_active_session(user_id: int):
         cursor.execute(
             """
             UPDATE app_session
-            SET user_id = ?, is_logged_in = 1, last_login = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            SET user_id = %s, is_logged_in = TRUE, last_login = NOW(), updated_at = NOW()
             WHERE id = 1
             """,
             (user_id,),
@@ -128,7 +130,7 @@ def clear_active_session():
         cursor.execute(
             """
             UPDATE app_session
-            SET user_id = NULL, is_logged_in = 0, updated_at = CURRENT_TIMESTAMP
+            SET user_id = NULL, is_logged_in = FALSE, updated_at = NOW()
             WHERE id = 1
             """
         )
@@ -146,7 +148,7 @@ def get_active_session_user():
             SELECT u.id, u.full_name, u.username, u.email, u.role, u.created_at
             FROM app_session s
             JOIN users u ON u.id = s.user_id
-            WHERE s.id = 1 AND s.is_logged_in = 1
+            WHERE s.id = 1 AND s.is_logged_in = TRUE
             """
         )
         user = cursor.fetchone()
@@ -172,7 +174,7 @@ def get_user_by_id(user_id: int):
             """
             SELECT id, full_name, username, email, role, is_active, is_locked, created_at, updated_at
             FROM users
-            WHERE id = ?
+            WHERE id = %s
             """,
             (user_id,),
         )
@@ -231,10 +233,10 @@ def update_user(user_id: int, full_name: str, email: str, is_active: bool):
         cursor.execute(
             """
             UPDATE users
-            SET full_name = ?, email = ?, is_active = ?, role = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            SET full_name = %s, email = %s, is_active = %s, role = %s, updated_at = NOW()
+            WHERE id = %s
             """,
-            (full_name.strip(), email.strip().lower(), 1 if is_active else 0, ROLE_STUDENT, user_id),
+            (full_name.strip(), email.strip().lower(), is_active, ROLE_STUDENT, user_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -249,10 +251,10 @@ def set_user_active_state(user_id: int, is_active: bool):
         cursor.execute(
             """
             UPDATE users
-            SET is_active = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            SET is_active = %s, updated_at = NOW()
+            WHERE id = %s
             """,
-            (1 if is_active else 0, user_id),
+            (is_active, user_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -267,10 +269,10 @@ def set_user_password(user_id: int, new_password: str, unlock: bool = False):
         cursor.execute(
             """
             UPDATE users
-            SET password_hash = ?, is_locked = CASE WHEN ? THEN 0 ELSE is_locked END, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            SET password_hash = %s, is_locked = CASE WHEN %s THEN FALSE ELSE is_locked END, updated_at = NOW()
+            WHERE id = %s
             """,
-            (hash_password(new_password), 1 if unlock else 0, user_id),
+            (hash_password(new_password), unlock, user_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -285,10 +287,10 @@ def set_user_lock_state(user_id: int, locked: bool):
         cursor.execute(
             """
             UPDATE users
-            SET is_locked = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            SET is_locked = %s, updated_at = NOW()
+            WHERE id = %s
             """,
-            (1 if locked else 0, user_id),
+            (locked, user_id),
         )
         conn.commit()
         return cursor.rowcount > 0
@@ -304,7 +306,7 @@ def get_user_by_username_or_email(username_or_email: str):
             """
             SELECT id, full_name, username, email, role, is_active, is_locked, created_at, updated_at
             FROM users
-            WHERE lower(username) = lower(?) OR lower(email) = lower(?)
+            WHERE lower(username) = lower(%s) OR lower(email) = lower(%s)
             """,
             (username_or_email.strip(), username_or_email.strip()),
         )

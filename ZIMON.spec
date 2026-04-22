@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('styles\\theme.qss', 'styles'), ('gui\\styles.qss', 'gui'), ('gui\\styles_light.qss', 'gui'), ('gui\\images', 'gui\\images')]
 binaries = []
-hiddenimports = ['PyQt6.sip', 'cv2', 'numpy']
+hiddenimports = ['PyQt6.sip', 'cv2', 'numpy', 'psycopg', 'psycopg_binary']
 tmp_ret = collect_all('PyQt6')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 

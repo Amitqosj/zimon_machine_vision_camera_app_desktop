@@ -32,7 +32,7 @@ def main():
     global APP_INSTANCE, LOGIN_WINDOW
     logger.info("Starting ZIMON application")
     init_db()
-    logger.info("SQLite database initialized")
+    logger.info("PostgreSQL database initialized")
     app = QApplication(sys.argv)
     APP_INSTANCE = app
 
